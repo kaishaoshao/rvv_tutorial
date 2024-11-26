@@ -96,6 +96,7 @@ int main() {
   std::cout << "clock():" << duration2 << " ms" << std::endl;
   std::cout << "chrono::steady_clock:" << std::chrono::duration <double, std::milli> (diff3).count() << " ms" << std::endl;
 
+  asm volatile ("vsetvli t0, a0, e8, m8, ta, ma"); 
   start1 = std::chrono::high_resolution_clock::now();
   start2 = clock();
   start3 = std::chrono::steady_clock::now();
