@@ -90,7 +90,95 @@ int fp_eq(float reference, float actual, float relErr)
   return fabsf(actual - reference) < absErr;
 }
 
-int test();
+int main2();
+int main3();
+int main4();
+int main5();
+
+void command(void *pParam)
+{
+  std::cout << "command\n";
+  auto start1 = std::chrono::high_resolution_clock::now();
+  clock_t start2 = clock();
+  auto start3 = std::chrono::steady_clock::now();
+  // saxpy_golden(N, 55.66, input, output_golden);
+  saxpy_golden(N, 55.66, input, output_golden);
+  auto end3 = std::chrono::steady_clock::now();
+  clock_t end2 = clock();
+  auto end1 = std::chrono::high_resolution_clock::now();
+  
+  auto diff1 = end1 - start1;
+  double duration2 = (double)(end2 - start2) * 1000 / CLOCKS_PER_SEC;
+  auto diff3 = end3 - start3;
+  // std::cout << std::setprecision(7) << std::fixed << "1 saxpy_golden cost:" << std::chrono::duration <double, std::milli> (diff).count() << " ms" << std::endl;
+  std::cout << "saxpy_golden cost:\n";
+  std::cout << "chrono::high_resolution_clock:" << std::chrono::duration <double, std::milli> (diff1).count() << " ms" << std::endl;
+  std::cout << "clock():" << duration2 << " ms" << std::endl;
+  std::cout << "chrono::steady_clock:" << std::chrono::duration <double, std::milli> (diff3).count() << " ms" << std::endl;
+
+  // clock_t asm_start = clock();
+  // asm volatile ("vsetvli t0, a0, e8, m8, ta, ma");
+  // clock_t asm_end = clock();
+  // std::cout << "asm cost : " << (double)(asm_end - asm_start) * 1000 / CLOCKS_PER_SEC << std::endl;
+
+  start1 = std::chrono::high_resolution_clock::now();
+  start2 = clock();
+  start3 = std::chrono::steady_clock::now();
+  asm volatile ("vsetvli t0, a0, e8, m8, ta, ma");
+  // saxpy_vec(N, 55.66, input, output);
+  saxpy_vec(N, 55.66, input, output);
+  end3 = std::chrono::steady_clock::now();
+  end2 = clock();
+  end1 = std::chrono::high_resolution_clock::now();
+
+
+  diff1 = end1 - start1;
+  duration2 = (double)(end2 - start2) * 1000 / CLOCKS_PER_SEC;
+  diff3 = end3 - start3;
+  // std::cout << std::setprecision(7) << std::fixed << "2 saxpy_vec cost:" << std::chrono::duration <double, std::milli> (diff).count() << " ms" << std::endl;
+  std::cout << "--------------------------------\nsaxpy_vec cost:\n";
+  std::cout << "chrono::high_resolution_clock:" << std::chrono::duration <double, std::milli> (diff1).count() << " ms" << std::endl;
+  std::cout << "clock():" << duration2 << " ms" << std::endl;
+  std::cout << "chrono::steady_clock:" << std::chrono::duration <double, std::milli> (diff3).count() << " ms" << std::endl;
+
+  int pass = 1;
+  for (int i = 0; i < N; i++) {
+    if (!fp_eq(output_golden[i], output[i], 1e-6)) {
+      printf("fail, %f=!%f\n", output_golden[i], output[i]);
+      pass = 0;
+    }
+  }
+  if (pass)
+    printf("pass\n");
+}
+
+int main1() {
+  /*
+  saxpy_golden(N, 55.66, input, output_golden);
+  saxpy_vec(N, 55.66, input, output);
+  int pass = 1;
+  for (int i = 0; i < N; i++) {
+    if (!fp_eq(output_golden[i], output[i], 1e-6)) {
+      printf("fail, %f=!%f\n", output_golden[i], output[i]);
+      pass = 0;
+    }
+  }
+  if (pass)
+    printf("pass\n");
+  return (pass == 0);
+  */
+
+  // clock_t asm_start = clock();
+  asm volatile ("vsetvli t0, a0, e8, m8, ta, ma");
+  // clock_t asm_end = clock();
+  // std::cout << "asm cost : " << (double)(asm_end - asm_start) * 1000 / CLOCKS_PER_SEC << std::endl;
+
+  std::thread keyboard_command_process;
+  keyboard_command_process = std::thread(command, nullptr);
+  keyboard_command_process.join();
+
+  return 1;
+}
 
 int main(int argc, char *argv[])
 {
@@ -155,11 +243,150 @@ int main(int argc, char *argv[])
 
   std::cout << "--------------------------------\n\n";  
 
-  test();
+  main5();
   return 0;
 }
 
-int test() {
+int main4() {
+  // while(1) ;
+  auto start1 = std::chrono::high_resolution_clock::now();
+  clock_t start2 = clock();
+  auto start3 = std::chrono::steady_clock::now();
+  // saxpy_golden(N, 55.66, input, output_golden);
+  saxpy_golden(N, 55.66, input, output_golden);
+  auto end3 = std::chrono::steady_clock::now();
+  clock_t end2 = clock();
+  auto end1 = std::chrono::high_resolution_clock::now();
+  
+  auto diff1 = end1 - start1;
+  double duration2 = (double)(end2 - start2) * 1000 / CLOCKS_PER_SEC;
+  auto diff3 = end3 - start3;
+  // std::cout << std::setprecision(7) << std::fixed << "1 saxpy_golden cost:" << std::chrono::duration <double, std::milli> (diff).count() << " ms" << std::endl;
+  std::cout << "saxpy_golden cost:\n";
+  std::cout << "chrono::high_resolution_clock:" << std::chrono::duration <double, std::milli> (diff1).count() << " ms" << std::endl;
+  std::cout << "clock():" << duration2 << " ms" << std::endl;
+  std::cout << "chrono::steady_clock:" << std::chrono::duration <double, std::milli> (diff3).count() << " ms" << std::endl;
+
+  // clock_t asm_start = clock();
+  // asm volatile ("vsetvli t0, a0, e8, m8, ta, ma");
+  // clock_t asm_end = clock();
+  // std::cout << "asm cost : " << (double)(asm_end - asm_start) * 1000 / CLOCKS_PER_SEC << std::endl;
+
+  start1 = std::chrono::high_resolution_clock::now();
+  start2 = clock();
+  start3 = std::chrono::steady_clock::now();
+  // saxpy_vec(N, 55.66, input, output);
+  saxpy_vec(N, 55.66, input, output);
+  end3 = std::chrono::steady_clock::now();
+  end2 = clock();
+  end1 = std::chrono::high_resolution_clock::now();
+
+
+  diff1 = end1 - start1;
+  duration2 = (double)(end2 - start2) * 1000 / CLOCKS_PER_SEC;
+  diff3 = end3 - start3;
+  // std::cout << std::setprecision(7) << std::fixed << "2 saxpy_vec cost:" << std::chrono::duration <double, std::milli> (diff).count() << " ms" << std::endl;
+  std::cout << "--------------------------------\nsaxpy_vec cost:\n";
+  std::cout << "chrono::high_resolution_clock:" << std::chrono::duration <double, std::milli> (diff1).count() << " ms" << std::endl;
+  std::cout << "clock():" << duration2 << " ms" << std::endl;
+  std::cout << "chrono::steady_clock:" << std::chrono::duration <double, std::milli> (diff3).count() << " ms" << std::endl;
+
+  int pass = 1;
+  for (int i = 0; i < N; i++) {
+    if (!fp_eq(output_golden[i], output[i], 1e-6)) {
+      printf("fail, %f=!%f\n", output_golden[i], output[i]);
+      pass = 0;
+    }
+  }
+  if (pass)
+    printf("pass\n");
+
+  // main2();
+  main3();
+
+  return (pass == 0);
+}
+
+int main2() {
+  t0 = clock();
+  for (int i = 0; i < 5000000; i++)
+    saxpy_golden(N, 55.66, input, output_golden);
+  t1 = clock();
+  printf("Execution time of saxpy_golden = %0.7f s\n\n", (float)(t1-t0)/CLOCKS_PER_SEC);
+
+  t0 = clock();
+  for (int i = 0; i < 5000000; i++)
+    saxpy_vec(N, 55.66, input, output);
+  t1 = clock();
+  printf("Execution time of saxpy_vector = %0.7f s\n\n", (float)(t1-t0)/CLOCKS_PER_SEC);
+
+  int pass = 1;
+  for (int i = 0; i < N; i++) {
+    if (!fp_eq(output_golden[i], output[i], 1e-6)) {
+      printf("fail, %f=!%f\n", output_golden[i], output[i]);
+      pass = 0;
+    }
+  }
+  if (pass)
+    printf("pass\n");
+  return (pass == 0);
+}
+
+int main3() {
+  std::cout << "\n\n loop 5000000\n";
+  auto start1 = std::chrono::high_resolution_clock::now();
+  clock_t start2 = clock();
+  auto start3 = std::chrono::steady_clock::now();
+  for (int i = 0; i < 5000000; i++)
+  saxpy_golden(N, 55.66, input, output_golden);
+  auto end3 = std::chrono::steady_clock::now();
+  clock_t end2 = clock();
+  auto end1 = std::chrono::high_resolution_clock::now();
+  
+  auto diff1 = end1 - start1;
+  double duration2 = (double)(end2 - start2) * 1000 / CLOCKS_PER_SEC;
+  auto diff3 = end3 - start3;
+  // std::cout << std::setprecision(7) << std::fixed << "1 saxpy_golden cost:" << std::chrono::duration <double, std::milli> (diff).count() << " ms" << std::endl;
+  std::cout << "saxpy_golden cost:\n";
+  std::cout << "chrono::high_resolution_clock:" << std::chrono::duration <double, std::milli> (diff1).count() << " ms" << std::endl;
+  std::cout << "clock():" << duration2 << " ms" << std::endl;
+  std::cout << "chrono::steady_clock:" << std::chrono::duration <double, std::milli> (diff3).count() << " ms" << std::endl;
+
+  start1 = std::chrono::high_resolution_clock::now();
+  start2 = clock();
+  start3 = std::chrono::steady_clock::now();
+  for (int i = 0; i < 5000000; i++)
+  saxpy_vec(N, 55.66, input, output);
+  end3 = std::chrono::steady_clock::now();
+  end2 = clock();
+  end1 = std::chrono::high_resolution_clock::now();
+
+
+  diff1 = end1 - start1;
+  duration2 = (double)(end2 - start2) * 1000 / CLOCKS_PER_SEC;
+  diff3 = end3 - start3;
+  // std::cout << std::setprecision(7) << std::fixed << "2 saxpy_vec cost:" << std::chrono::duration <double, std::milli> (diff).count() << " ms" << std::endl;
+  std::cout << "--------------------------------\nsaxpy_vec cost:\n";
+  std::cout << "chrono::high_resolution_clock:" << std::chrono::duration <double, std::milli> (diff1).count() << " ms" << std::endl;
+  std::cout << "clock():" << duration2 << " ms" << std::endl;
+  std::cout << "chrono::steady_clock:" << std::chrono::duration <double, std::milli> (diff3).count() << " ms" << std::endl;
+
+  int pass = 1;
+  for (int i = 0; i < N; i++) {
+    if (!fp_eq(output_golden[i], output[i], 1e-6)) {
+      printf("fail, %f=!%f\n", output_golden[i], output[i]);
+      pass = 0;
+    }
+  }
+  if (pass)
+    printf("pass\n");
+
+  // main2();
+
+  return (pass == 0);
+}
+
+int main5() {
   std::cout << "\n5000000 loops\n";
   // auto start1 = std::chrono::high_resolution_clock::now();
   clock_t start2 = clock();

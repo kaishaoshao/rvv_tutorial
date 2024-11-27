@@ -21,8 +21,17 @@ include_directories(
 
 
 SET(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv")
+# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv")
 # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv_zba_zbb_zbc_zbs -fno-tree-vectorize -fno-tree-loop-vectorize")
+# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv -fno-tree-vectorize -fno-tree-loop-vectorize")
+
+# riscv64-unknown-linux-gnu-gcc -march=rv64gcv rvv_saxpy.cpp -O2 -static
+# g++ -march=rv64gcv rvv_saxpy.cpp -O2 -static -o test13
+
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -march=rv64gcv -static")
+
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv -static")
+
 
 
 add_executable(test1
