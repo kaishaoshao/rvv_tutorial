@@ -45,6 +45,10 @@ add_executable(test2
   ${CMAKE_CURRENT_SOURCE_DIR}/src/test2.cpp
 )
 
+add_executable(test3
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/test3.cpp
+)
+
 # target_link_libraries(test1 Eigen3::Eigen)
 
 # target_link_libraries(test1 -lpthread)
