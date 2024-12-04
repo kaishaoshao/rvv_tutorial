@@ -19,11 +19,65 @@ sum=5050
 
 */
 
+// clock()函数在windows上返回毫秒，在linux上返回微秒，毫秒级精度
+// alignof是一个操作符，用于查询类型或变量的对齐要求。它返回一个std::size_t类型的值，表示类型或变量的对齐字节数
+// alignas是一个对齐说明符，用于指定变量或类型的最小对齐要求。alignas可以用于变量声明或类型定义中，以确保所声明的变量或类型实例具有特定的对齐。对齐值必须是 2 的幂
+
+struct MyStruct {
+    char c;
+    int i;
+};
+
+struct MyStruct2 {
+    char c[20];
+};
+
+struct alignas(16) AlignedStruct {
+    int i;
+};
+
+struct alignas(16) AlignedStruct2 {
+    char c[20];
+};
+
+int main2();
+
 int main(int argc, char *argv[])
 {
+    std::cout << "Alignment of char: " << alignof(char) << std::endl;
+    std::cout << "Alignment of int: " << alignof(int) << std::endl;
+
+    std::cout << "sizeof of MyStruct: " << sizeof(MyStruct) << std::endl;
+    std::cout << "Alignment of MyStruct: " << alignof(MyStruct) << std::endl;
+
+    std::cout << "sizeof of MyStruct: " << sizeof(MyStruct2) << std::endl;
+    std::cout << "Alignment of MyStruct: " << alignof(MyStruct2) << std::endl;
+
+    AlignedStruct a;
+    std::cout << "Alignment of AlignedStruct: " << alignof(a) << std::endl;
+
+    std::cout << "sizeof of AlignedStruct2: " << sizeof(AlignedStruct2) << std::endl;
+    std::cout << "Alignment of AlignedStruct2: " << alignof(AlignedStruct2) << std::endl;
+
+    alignas(16) char sz[20];
+    std::cout << "sizeof(sz)=" << sizeof(sz) << std::endl;
+    std::cout << "alignof(sz)=" << alignof(sz) << std::endl;
+
+    alignas(16) float val[52];
+    std::cout << "sizeof(val)=" << sizeof(val) << std::endl;
+    std::cout << "alignof(val)=" << alignof(val) << std::endl;
+
+    alignas(32) float val2[10];
+    std::cout << "sizeof(val2)=" << sizeof(val2) << std::endl;
+    std::cout << "alignof(val2)=" << alignof(val2) << std::endl;
+
+    main2();
+    //-----------------------------------------------------------------------------------------
+
     // TODO: size为1万时，计算结果居然不正确。
     constexpr int _SIZE_ = 10000; // 5000 // 100
-    __attribute__((aligned(32))) float arr[_SIZE_];
+    // __attribute__((aligned(32))) float arr[_SIZE_];
+    alignas(16) float arr[_SIZE_];		// 16-byte aligned
     for (int i = 0; i < _SIZE_; i++) {
         arr[i] = (float)(i + 1);  // 初始化数组为 1.0, 2.0, 3.0, ..., 100.0
     }
@@ -96,13 +150,55 @@ int main(int argc, char *argv[])
     clock_t t1 = clock();
 
     // std::cout << "1.0 + 2.0 + ... + 100=" << sum << " cost=" << (t1 - t0) << std::endl;
-    std::cout << std::fixed << std::setprecision(2) << "1.0 + 2.0 + ... + " << _SIZE_ << "=" << sum << " cost=" << (t1 - t0) << std::endl;
+    std::cout << std::fixed << std::setprecision(2) << "1.0 + 2.0 + ... + " << _SIZE_ << "=" << sum << " cost=" << (t1 - t0) << " cycles" << std::endl;
 
     t0 = clock();
     double sum2 = 0;
     for(int i = 0; i < _SIZE_; i++) sum2 += arr[i];
     t1 = clock();
-    std::cout << std::fixed << std::setprecision(2) << "sum2=" << sum2 << " cost=" << (t1 - t0) << std::endl;
+    std::cout << std::fixed << std::setprecision(2) << "sum2=" << sum2 << " cost=" << (t1 - t0) << " cycles" << std::endl;
+
+    return 0;
+}
+
+ 
+// 每个 struct_float 类型的对象将会按照 alignof(float) 的边界对齐（通常是 4）：
+struct alignas(float) struct_float
+{
+    // 你的定义在这里
+};
+ 
+// 每个 sse_t 类型的对象将会按照 32 字节的边界对齐：
+struct alignas(32) sse_t
+{
+    float sse_data[4];
+};
+ 
+// 数组 cacheline 将会按照 64 字节的边界对齐：
+using cacheline_t = alignas(64) char[64];
+cacheline_t cacheline;
+ 
+int main2()
+{
+    struct default_aligned
+    {
+        float data[4];
+    } a, b, c;
+    sse_t x, y, z;
+ 
+    std::cout
+        << "alignof(struct_float) = " << alignof(struct_float) << '\n'
+        << "sizeof(sse_t) = " << sizeof(sse_t) << '\n'
+        << "alignof(sse_t) = " << alignof(sse_t) << '\n'
+        << "alignof(cacheline_t) = " << alignof(cacheline_t) << '\n'
+        << "alignof(cacheline) = " << alignof(decltype(cacheline)) << '\n'
+        << std::hex << std::showbase
+        << "&a: " << &a << "\n"
+           "&b: " << &b << "\n"
+           "&c: " << &c << "\n"
+           "&x: " << &x << "\n"
+           "&y: " << &y << "\n"
+           "&z: " << &z << '\n';
 
     return 0;
 }
