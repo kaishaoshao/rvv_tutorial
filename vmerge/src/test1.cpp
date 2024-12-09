@@ -80,7 +80,8 @@ int main(int argc, char** argv)
     for(size_t vl, i = 0; i < n; i += vl)
     {
         // 根据剩余元素数设置向量长度
-        vl = __riscv_vsetvl_e32m2(n);
+        // vl = __riscv_vsetvl_e32m2(n);
+        vl = __riscv_vsetvl_e32m2(n - i);
         std::cout << "vl=" << vl << std::endl;
 
         // 从数据中加载向量
