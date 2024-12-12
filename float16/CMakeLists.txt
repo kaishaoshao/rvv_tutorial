@@ -3,6 +3,12 @@ cmake_minimum_required(VERSION 3.13)
 
 project(test1)
 
+# set(CMAKE_C_COMPILER "gcc") # 设置C编译器
+# set(CMAKE_CXX_COMPILER "g++") # 设置C++编译器
+
+set(CMAKE_C_COMPILER "clang")
+set(CMAKE_CXX_COMPILER "clang++")
+
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
@@ -32,7 +38,8 @@ ${CMAKE_CURRENT_SOURCE_DIR}/../include
 
 SET(CMAKE_BUILD_TYPE "Release")
 # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv_zfh") # support vfloat16
+# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv_zfh") # support vfloat16
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv_zfh_zvfh1p0") # support vfloat16
 # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv_zba_zbb_zbc_zbs -fno-tree-vectorize -fno-tree-loop-vectorize")
 
 find_package(Eigen3 REQUIRED)
