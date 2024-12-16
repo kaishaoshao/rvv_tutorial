@@ -62,7 +62,7 @@ int main(int argc, char* argv[])
     // _Float16 number = static_cast<_Float16>(2050.0); // 可以输出2050，截断了，但是不受影响
     // _Float16 number = static_cast<_Float16>(0.123456789); // 输出0.123474
     // _Float16 number = static_cast<_Float16>(0.12345); // 输出0.123474
-    _Float16 number = static_cast<_Float16>(0.1234); // 输出0.123474
+    _Float16 number = static_cast<_Float16>(0.1234); // 输出0.123413
     std::cout << "number=" << static_cast<float>(number) << std::endl;
     
     if(argc != 2)
