@@ -59,7 +59,10 @@ int main(int argc, char* argv[])
     //大于2047的整数，有可能受影响，因为如果截断的部分刚好都是0，则没有影响
     // _Float16 number = static_cast<_Float16>(2048.0); // 可以输出2048 截断了，但是不受影响
     // _Float16 number = static_cast<_Float16>(2049.0); // 还是输出2048， 截断了，受影响
-    _Float16 number = static_cast<_Float16>(2050.0); //可以输出2050，截断了，但是不受影响
+    // _Float16 number = static_cast<_Float16>(2050.0); // 可以输出2050，截断了，但是不受影响
+    // _Float16 number = static_cast<_Float16>(0.123456789); // 输出0.123474
+    // _Float16 number = static_cast<_Float16>(0.12345); // 输出0.123474
+    _Float16 number = static_cast<_Float16>(0.1234); // 输出0.123474
     std::cout << "number=" << static_cast<float>(number) << std::endl;
     
     if(argc != 2)
