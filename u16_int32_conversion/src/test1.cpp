@@ -71,6 +71,96 @@ int main(int argc, char *argv[])
     for(size_t i = 0; i < n; i++)
     std::cout << _u16_array_[i] << "  "; std::cout << std::endl;
 
+
+    // test multiply & add
+    {
+        constexpr int kernel[5] = {1, 4, 6, 4, 1};
+        int row_m2[] = { 1, 3, 5, 7, 9 };   // 1  3   5   7   9
+        int row_m1[] = { 1, 3, 5, 7, 9 };   // 4  12  20  28  36
+        int row[] = { 1, 3, 5, 7, 9 };      // 6  18  30  42  54
+        int row_p1[] = { 1, 3, 5, 7, 9 };   // 4  12  20  28  36
+        int row_p2[] = { 1, 3, 5, 7, 9 };   // 1  3   5   7   9
+                                            // 16 48  80  112 144
+
+        int result_a[5];
+        size_t n = 5;
+#if 1
+        // vint32m2_t __riscv_vle32_v_i32m2(const int32_t *rs1, size_t vl);
+        // vint32m2_t __riscv_vmul_vx_i32m2(vint32m2_t vs2, int32_t rs1, size_t vl);
+        // vint32m2_t __riscv_vmadd_vx_i32m2(vint32m2_t vd, int32_t rs1, vint32m2_t vs2, size_t vl);
+        int result_tmp[5];
+        for (size_t vl, i = 0; i < n; i += vl)
+        {
+          vl = __riscv_vsetvl_e32m2(n - i);
+
+          vint32m2_t vec_row_m2 = __riscv_vle32_v_i32m2(row_m2 + i, vl);
+          vint32m2_t vec_row_m1 = __riscv_vle32_v_i32m2(row_m1 + i, vl);
+          vint32m2_t vec_row = __riscv_vle32_v_i32m2(row + i, vl);
+          vint32m2_t vec_row_p1 = __riscv_vle32_v_i32m2(row_p1 + i, vl);
+          vint32m2_t vec_row_p2 = __riscv_vle32_v_i32m2(row_p2 + i, vl);
+#if 0
+          vint32m2_t result = __riscv_vmul_vx_i32m2(vec_row_m2, kernel[0], vl);
+          __riscv_vse32_v_i32m2(result_tmp + i, result, vl);
+          std::cout << "s1: ";
+          for(size_t i = 0; i < vl; i++)
+          std::cout << result_tmp[i] << "  "; std::cout << std::endl;
+
+
+          result = __riscv_vmadd_vx_i32m2(result, kernel[1], vec_row_m1, vl);
+          __riscv_vse32_v_i32m2(result_tmp + i, result, vl);
+          std::cout << "s2: ";
+          for(size_t i = 0; i < vl; i++)
+          std::cout << result_tmp[i] << "  "; std::cout << std::endl;
+
+        //   s2: 5  15  25  35  45  
+        //   s3: 31  93  155  217  279  //err. 11 33 55 77 99
+
+          result = __riscv_vmadd_vx_i32m2(result, kernel[2], vec_row, vl); // 5  15  25  35  45  +  6  18  30  42  54
+          __riscv_vse32_v_i32m2(result_tmp + i, result, vl);
+          std::cout << "s3: ";
+          for(size_t i = 0; i < vl; i++)
+          std::cout << result_tmp[i] << "  "; std::cout << std::endl;
+
+          result = __riscv_vmadd_vx_i32m2(result, kernel[3], vec_row_p1, vl);
+          __riscv_vse32_v_i32m2(result_tmp + i, result, vl);
+          std::cout << "s4: ";
+          for(size_t i = 0; i < vl; i++)
+          std::cout << result_tmp[i] << "  "; std::cout << std::endl;
+
+          result = __riscv_vmadd_vx_i32m2(result, kernel[4], vec_row_p2, vl);
+          __riscv_vse32_v_i32m2(result_tmp + i, result, vl);
+          std::cout << "s5: ";
+          for(size_t i = 0; i < vl; i++)
+          std::cout << result_tmp[i] << "  "; std::cout << std::endl;
+#else
+          vint32m2_t result = __riscv_vmul_vx_i32m2(vec_row_m2, kernel[0], vl);
+          result = __riscv_vmadd_vx_i32m2(vec_row_m1, kernel[1], result, vl);
+          result = __riscv_vmadd_vx_i32m2(vec_row, kernel[2], result, vl);
+          result = __riscv_vmadd_vx_i32m2(vec_row_p1, kernel[3], result, vl);
+          result = __riscv_vmadd_vx_i32m2(vec_row_p2, kernel[4], result, vl);
+#endif
+          __riscv_vse32_v_i32m2(result_a + i, result, vl);
+        }
+
+        std::cout << "vmadd : \n";
+        for(size_t i = 0; i < n; i++)
+        std::cout << result_a[i] << "  "; std::cout << std::endl;
+#else
+        for (int r = 0; r < n; r++) {
+          int val_int = kernel[0] * row_m2[r] + kernel[1] * row_m1[r] +
+                        kernel[2] * row[r] + kernel[3] * row_p1[r] +
+                        kernel[4] * row_p2[r];
+        //   T val = ((val_int + (1 << 7)) >> 8);
+          result_a[r] = val_int; //val;
+        }
+
+        std::cout << "general compute : \n";
+        for(size_t i = 0; i < n; i++)
+        std::cout << result_a[i] << "  "; std::cout << std::endl;
+#endif
+
+    }
+
     return 0;
 }
 
@@ -78,9 +168,18 @@ int main(int argc, char *argv[])
 output:
 root@ubuntu:~/lwx/rvv_tutorial/u16_int32_conversion/build# ./test1
 u16 to int32 : 
-9728  65280  13312  43520  47872  52224  
+9728  65280  13312  43520  47872  52224
 int32 to u16 : 
-9728  65280  13312  43520  47872  52224  56576  60928  
+9728  65280  13312  43520  47872  52224  56576  60928
+s1: 1  3  5  7  9  
+s2: 5  15  25  35  45  
+s3: 31  93  155  217  279  // 11 33 55 77 99
+s4: 125  375  625  875  1125  
+s5: 126  378  630  882  1134 
+vmadd : 
+126  378  630  882  1134 
+general compute : 
+16  48  80  112  144 
 root@ubuntu:~/lwx/rvv_tutorial/u16_int32_conversion/build# 
 
 */
