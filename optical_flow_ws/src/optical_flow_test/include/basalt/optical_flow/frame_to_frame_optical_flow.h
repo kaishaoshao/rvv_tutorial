@@ -49,6 +49,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <basalt/image/image_pyr.h>
 #include <basalt/utils/keypoints.h>
 
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+
 // 2023-11-21
 #include <condition_variable>
 extern std::condition_variable vio_cv;
@@ -262,8 +267,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
       // step2.2 并行构建金字塔：多线程执行图像金子塔的构建
       // 参数1.指定参数范围 参数2匿名的函数体
-      // tbb::parallel_for(tbb::blocked_range<size_t>(0, calib.intrinsics.size()), // 迭代范围用数学区间表示是[0, 2)
-      tbb::parallel_for(tbb::blocked_range<size_t>(0, calib.intrinsics.size(), 2), // 迭代范围用数学区间表示是[0, 2) // single thread.
+      tbb::parallel_for(tbb::blocked_range<size_t>(0, calib.intrinsics.size()), // 迭代范围用数学区间表示是[0, 2)
+      // tbb::parallel_for(tbb::blocked_range<size_t>(0, calib.intrinsics.size(), 2), // 迭代范围用数学区间表示是[0, 2) // single thread.
                         [&](const tbb::blocked_range<size_t>& r) { // [&]表示以引用方式捕获外部作用域的所有变量, [&]表示外部参数传引用，如果没有const修饰时可修改值。
                           for (size_t i = r.begin(); i != r.end(); ++i) {
                             //遍历每一个相机，构建图像金字塔
@@ -287,6 +292,9 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       // std::cout << "optical flow: cam0 observation count: " << transforms->observations.at(0).size() << std::endl;
       std::cout << "optical flow: cam0 observation count: " << transforms->observations.at(0).size() 
         << " / cam1 obs count: " << transforms->observations.at(1).size() << std::endl;
+
+      /*
+       * comment on 2024-12-22.  
       if(transforms->observations.at(0).size() <= 0)
       {
         t_ns = -1;
@@ -294,7 +302,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
         output_queue->push(transforms);
 
         return ;
-      }
+      }*/
       // the end.
     } else { // 非第一次进入
 
@@ -346,6 +354,75 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       // 追踪结束
     }
 
+
+    // show track
+    {
+      const int ROW = new_img_vec->img_data[0].img->h;
+      const int WINDOW_SIZE = config.vio_max_states + config.vio_max_kfs;
+
+      // step1 convert image
+      uint16_t* data_in = nullptr;
+      uint8_t* data_out = nullptr;
+      cv::Mat disp_frame;
+
+      // for(int cam_id = 0; cam_id < calib.intrinsics.size(); cam_id++)
+      for (int cam_id = 0; cam_id < 1; cam_id++) {
+        // img_data is a vector<ImageData>
+        basalt::ImageData imageData = new_img_vec->img_data[cam_id];
+        // std::cout << "w=" << imageData.img->w << "  h=" << imageData.img->h <<
+        // std::endl;
+        data_in = imageData.img->ptr;
+        disp_frame = cv::Mat::zeros(imageData.img->h, imageData.img->w, CV_8UC1);  // CV_8UC3
+        data_out = disp_frame.ptr();
+
+        size_t full_size = imageData.img->size();  // disp_frame.cols * disp_frame.rows;
+        for (size_t i = 0; i < full_size; i++) {
+          int val = data_in[i];
+          val = val >> 8;
+          data_out[i] = val;
+          // disp_frame.at(<>)
+        }
+
+        // cv::cvtColor(disp_frame, disp_frame, CV_GRAY2BGR);  // CV_GRAY2RGB
+
+        // SHOW_TRACK
+        cv::Mat tmp_img = disp_frame.rowRange(cam_id * ROW, (cam_id + 1) * ROW);
+        cv::cvtColor(disp_frame, tmp_img, cv::COLOR_GRAY2BGR); // CV_GRAY2RGB
+
+        // for (unsigned int j = 0; j < trackerData[i].cur_pts.size(); j++)
+        for (const auto& kv : transforms->observations[cam_id])
+        {
+            double len = std::min(1.0, 1.0 * kv.second.second / WINDOW_SIZE);
+            auto p = kv.second.first.translation();
+            cv::circle(tmp_img, cv::Point2f(p.x(), p[1]), 2, cv::Scalar(255 * (1 - len), 0, 255 * len), 2);
+
+            //draw speed line
+            // Vector2d tmp_cur_un_pts (trackerData[i].cur_un_pts[j].x, trackerData[i].cur_un_pts[j].y);
+            // Vector2d tmp_pts_velocity (trackerData[i].pts_velocity[j].x, trackerData[i].pts_velocity[j].y);
+            // Vector3d tmp_prev_un_pts;
+            // tmp_prev_un_pts.head(2) = tmp_cur_un_pts - 0.10 * tmp_pts_velocity;
+            // tmp_prev_un_pts.z() = 1;
+            // Vector2d tmp_prev_uv;
+            // trackerData[i].m_camera->spaceToPlane(tmp_prev_un_pts, tmp_prev_uv);
+            // cv::line(tmp_img, trackerData[i].cur_pts[j], cv::Point2f(tmp_prev_uv.x(), tmp_prev_uv.y()), cv::Scalar(255 , 0, 0), 1 , 8, 0);
+
+            //char name[10];
+            //sprintf(name, "%d", trackerData[i].ids[j]);
+            //cv::putText(tmp_img, name, trackerData[i].cur_pts[j], cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+        }
+
+        // cv::imshow("vis", disp_frame);
+        cv::imshow("tracked image", tmp_img);
+        cv::waitKey(5);
+        // cv::waitKey(0);
+
+
+      }
+      
+
+      return ;
+    }
+
     // 判断是否定义了输出队列,如果输出队列不为空，将结果push到输出队列
     // 类似vins指定频率发布图像，防止imu相比视觉频率低导致相邻帧没有imu数据，使图像跳帧播放
     if (output_queue && frame_counter % config.optical_flow_skip_frames == 0) {
@@ -362,14 +439,14 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
   // 这里的1指的是上一帧，那么2就是当前帧；或者1指的是当前帧的左目， 那么2指的是当前帧的右目
   void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
                    const basalt::ManagedImagePyr<uint16_t>& pyr_2,
-                   const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
+                   const Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>&
                        transform_map_1, // 1中的点
-                   Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
+                   Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>&
                        transform_map_2) const { // 用于返回追踪到的点
     // num_points为1中点的个数
     size_t num_points = transform_map_1.size();
 
-    std::vector<KeypointId> ids;
+    std::vector<std::pair<KeypointId, TrackCnt>> ids;
     Eigen::aligned_vector<Eigen::AffineCompact2f> init_vec;
 
     ids.reserve(num_points);
@@ -377,12 +454,12 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
     // 1.特征点类型转换map->vector
     for (const auto& kv : transform_map_1) {
-      ids.push_back(kv.first); // 1中点的id
-      init_vec.push_back(kv.second); // 1中点的信息（在2d图像上的旋转和平移信息）
+      ids.push_back(std::make_pair(kv.first, kv.second.second)); // 1中点的id
+      init_vec.push_back(kv.second.first); // 1中点的信息（在2d图像上的旋转和平移信息）
     }
 
     // 定义输出结果的容器
-    tbb::concurrent_unordered_map<KeypointId, Eigen::AffineCompact2f,
+    tbb::concurrent_unordered_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>,
                                   std::hash<KeypointId>>
         result;
 
@@ -394,7 +471,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       
       // 遍历每一个特征点
       for (size_t r = range.begin(); r != range.end(); ++r) { // r表示点在vector容器中的序号
-        const KeypointId id = ids[r]; // 得到点的id
+        const std::pair<KeypointId, TrackCnt> id = ids[r]; // 得到点的id
 
         // 取出特征点在参考帧或者左目中的像素位置transform_1
         const Eigen::AffineCompact2f& transform_1 = init_vec[r];
@@ -427,7 +504,10 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
             // 判断正向光流和反向光流的误差是否合法，合法则保存结果
             if (dist2 < config.optical_flow_max_recovered_dist2) {
-              result[id] = transform_2;
+              // result[id] = transform_2;
+              result[id.first] = std::make_pair(transform_2, id.second + 1);
+              // id.second += 1;
+              // result[std::make_pair(id.first, id.second + 1)] = transform_2;
             }
           }
         }
@@ -597,7 +677,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     // 将以前追踪到的点放入到pts0,进行临时保存
     // kv为Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>类型的容器中的一个元素（键值对）
     for (const auto& kv : transforms->observations.at(0)) { // at(0)表示取左目的观测数据
-      pts0.emplace_back(kv.second.translation().cast<double>()); // 取2d图像的平移部分，即二维像素坐标
+      pts0.emplace_back(kv.second.first.translation().cast<double>()); // 取2d图像的平移部分，即二维像素坐标
     }
 
     KeypointsData kd; // 用来存储新检测到的特征点
@@ -614,7 +694,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     detectKeypoints(pyramid->at(0).lvl(0), kd, grid_size_, 1, pts0);
     // detectKeypoints(pyramid->at(0).lvl(0), kd, grid_size_, 1, pts0, mask);
 
-    Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f> new_poses0,
+    Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>> new_poses0,
         new_poses1;
 
     // step 2 遍历特征点, 每个特征点利用特征点 初始化光流金字塔的初值
@@ -625,8 +705,13 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       transform.translation() = kd.corners[i].cast<Scalar>(); // 角点坐标，保存到transform的平移部分
 
       // 特征点转换成输出结果的数据类型map
-      transforms->observations.at(0)[last_keypoint_id] = transform; // 键值对来存储特征点，类型为Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>
-      new_poses0[last_keypoint_id] = transform;
+      // transforms->observations.at(0)[last_keypoint_id] = transform; // 键值对来存储特征点，类型为Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>
+      transforms->observations.at(0)[last_keypoint_id] = std::make_pair(transform, 1);
+      // std::pair<KeypointId, TrackCnt> key(last_keypoint_id, 1);
+      // transforms->observations.at(0)[key] = transform;
+      // transforms->observations.at(0)[std::make_pair(last_keypoint_id, 1)] = transform; // another method 2024-12-22
+      // new_poses0[last_keypoint_id] = transform;
+      new_poses0[last_keypoint_id] = std::make_pair(transform, 1);
 
       last_keypoint_id++; // last keypoint id 是一个类成员变量
     }
@@ -660,8 +745,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
       // 如果在左目中查询到，则把特征点对应ID保存
       if (it != transforms->observations.at(0).end()) {
-        proj0.emplace_back(it->second.translation());
-        proj1.emplace_back(kv.second.translation());
+        proj0.emplace_back(it->second.first.translation());
+        proj1.emplace_back(kv.second.first.translation());
         kpid.emplace_back(kv.first);
       }
     }

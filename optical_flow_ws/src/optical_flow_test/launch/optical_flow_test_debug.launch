@@ -1,6 +1,6 @@
 <launch>
 	<!-- <rosparam command="load" file="$(find viobot)/config/viobot.yaml" />   -->
-    <node name="optical_flow_test" pkg="optical_flow_test" type="optical_flow_test" output="screen" respawn="false" >
+    <node name="optical_flow_test" pkg="optical_flow_test" type="optical_flow_test" output="screen" respawn="false" launch-prefix="xterm -e gdb -ex run --args">
         <!-- <param name="tks_pro_integration" type="bool" value="true" /> -->
         <!-- <param name="src_ip_address" type="string" value="192.168.55.28" /> -->
         <!-- <param name="dest_ip_adderss" type="string" value="192.168.55.21" /> -->

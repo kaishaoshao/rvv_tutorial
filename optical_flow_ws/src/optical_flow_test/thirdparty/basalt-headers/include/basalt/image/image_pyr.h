@@ -81,7 +81,7 @@ class ManagedImagePyr {
     image.Fill(0); // 图像的每一个位置赋值0
     lvl_internal(0).CopyFrom(other); // 给第0层赋值原始图像数据
 
-    #if 1
+    #if 0
     clock_t clock_start = clock();
     #endif
     for (size_t i = 0; i < num_levels; i++) {
@@ -91,7 +91,7 @@ class ManagedImagePyr {
       subsample(l, lp1); // 下采样
     }
 
-    #if 1
+    #if 0
     clock_t clock_end = clock();
 #if !defined(_RVV_PYRAMID_)
     std::cout << std::fixed << std::setprecision(3) << "general image pyramid:" << " clock=" << (clock_end - clock_start) << " cycles\n";

@@ -79,10 +79,6 @@ int main(int argc, char* argv[])
     << "config_path=" << yaml.config_path << std::endl;
 
 
-    basalt::VioConfig vio_config;
-    // wx::OpticalFlowConfig config;
-    basalt::Calibration<double> calib;
-
     if (!yaml.config_path.empty()) {
       vio_config.load(yaml.config_path);
     }

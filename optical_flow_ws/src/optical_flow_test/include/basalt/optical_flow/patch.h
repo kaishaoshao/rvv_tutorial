@@ -43,7 +43,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // calc effiency: e32m2 > e32m8 > no_rvv > e32m4
 
 // #define _USE_RISCV_V
-#define _CALC_TIME_
+// #define _CALC_TIME_
 #include <time.h>
 
 #ifdef _USE_RISCV_V
@@ -2035,7 +2035,7 @@ template <typename ImgT>
     int num_residuals = 0;
 
 #if !defined(_USE_RISCV_V)
-    #if 1
+    #if 0
     clock_t start2 = clock();
     #endif
     // 对于pattern的每个点进行计算
@@ -2049,7 +2049,7 @@ template <typename ImgT>
         residual[i] = 0;
       }
     }
-    #if 1
+    #if 0
     clock_t end2 = clock();
 
     std::cout << std::fixed << std::setprecision(3) << "redidual:" << " sum=" << sum \

@@ -83,7 +83,7 @@ CRos1IO::CRos1IO(const ros::NodeHandle& pnh, const TYamlIO& yaml) noexcept
   Kalman_Filter_Init(&kalman_filter_pt1, yaml_.kf_q, yaml_.kf_r, 0, 1);
 #endif
 
-#ifdef _VERIFY_CONFIG_FILE
+#ifdef _unprint_// _VERIFY_CONFIG_FILE
   std::cout << std::boolalpha << "CRos1IO---\n"
             << "calib_path=" << yaml_.cam_calib_path << std::endl
             << "config_path=" << yaml_.config_path << std::endl

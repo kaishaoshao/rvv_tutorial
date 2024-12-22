@@ -51,6 +51,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace basalt {
 
 using KeypointId = size_t;
+using TrackCnt = int;
 
 struct OpticalFlowInput {
   using Ptr = std::shared_ptr<OpticalFlowInput>; // 定义ptr类型
@@ -71,13 +72,15 @@ struct OpticalFlowResult {
   // 用vector存放双目的观测，0-左目，1-右目
   // 同时每一个相机的观测用map存储
   // KeypointId特征点ID号,AffineCompact2f特征点在图像上的像素位置，Eigen存放用于描述二维上的平移和旋转
-  std::vector<Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>>
+  std::vector<Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>>
       observations; // vector的key是相机序号  value是map map的 key是特征点id value是特征点的平移和旋转参数
 
   // key是相机 value是map map的key是特征点id value是特征点放在哪层金字塔
   std::vector<std::map<KeypointId, size_t>> pyramid_levels;
 
   OpticalFlowInput::Ptr input_images; // 输入的数据
+  // vector<int> track_cnt;
+  // int track_cnt = 1; // 初始值为1
 };
 
 class OpticalFlowBase {
