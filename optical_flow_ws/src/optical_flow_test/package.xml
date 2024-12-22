@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!-- <?xml-model href="http://download.ros.org/schema/package_format2.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?> -->
+<package format="2">
+  <name>optical_flow_test</name>
+  <version>0.0.1</version>
+  <description>ros2 io</description>
+  <maintainer email="zc@zc.com">zc</maintainer>
+  <maintainer email="pr@pr.com">pr</maintainer>
+  <license>Apache License 2.0</license>
+  <author>Mikael Arguedas</author>
+  <author>Morgan Quigley</author>
+  <author email="wx@wx.com">wx</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>std_msgs</depend>
+  <depend>rosmsg</depend>
+  <depend>sensor_msgs</depend>
+
+  <depend>message_filters</depend>
+  <depend>nav_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>rosbag</depend>
+  <!-- <depend>message_generation</depend> -->
+
+  <!-- <depend>sensor_pub</depend> -->
+  <!-- <depend>myodom</depend> --> <!-- add this module to ensure find it before compile -->
+  <!-- <depend>atp_info</depend> -->
+  <!-- <depend>gnss_comm</depend> -->
+  <!-- <depend>gvins</depend> -->
+
+  <export>
+  </export>
+</package>

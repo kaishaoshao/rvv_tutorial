@@ -13,3 +13,5 @@ CMakeUserPresets.json
 .vscode*
 build*
 a.out*
+devel*
+.catkin*

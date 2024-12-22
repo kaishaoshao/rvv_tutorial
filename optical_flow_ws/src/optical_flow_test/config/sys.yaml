@@ -1,0 +1,135 @@
+num_yaw_optimized: 100 # if set 0, it will be optimized all the time. if > 0, it's the maximum optimize times of yaw angle.
+use_gvio: true # // if true use 'SqrtKeypointGvioEstimator' or false use 'SqrtKeypointVioEstimator'.
+
+# gnss parameters
+gnss_enable: false
+rtk_topic: "/FM_F20L/receiver_lla"           # GNSS raw measurement topic
+gnss_meas_topic: "/YY_LG69TAD/range_meas"           # GNSS raw measurement topic
+gnss_ephem_topic: "/YY_LG69TAD/ephem"               # GPS, Galileo, BeiDou ephemeris
+gnss_glo_ephem_topic: "/YY_LG69TAD/glo_ephem"       # GLONASS ephemeris
+gnss_iono_params_topic: "/YY_LG69TAD/iono_params"   # GNSS broadcast ionospheric parameters
+gnss_tp_info_topic: "/ublox_driver/time_pulse_info"   # PPS time info
+gnss_elevation_thres: 15            # satellite elevation threshold (degree)
+gnss_psr_std_thres: 5.0             # pseudo-range std threshold
+gnss_dopp_std_thres: 5.0            # doppler std threshold
+gnss_track_num_thres: 5            # number of satellite tracking epochs before entering estimator
+gnss_ddt_sigma: 0.1
+
+gnss_local_online_sync: false                       # if perform online synchronization betwen GNSS and local time
+local_trigger_info_topic: "/external_trigger"   # external trigger info of the local sensor, if `gnss_local_online_sync` is 1
+gnss_local_time_diff: 18.0                      # difference between GNSS and local time (s), if `gnss_local_online_sync` is 0
+
+gnss_iono_default_parameters:
+   rows: 1
+   cols: 8
+   dt: d
+   data: [0.1118E-07,  0.2235E-07, -0.4172E-06,  0.6557E-06,
+          0.1249E+06, -0.4424E+06,  0.1507E+07, -0.2621E+06]
+# the end.
+
+show_gui: false
+print_queue: false
+image0_topic: /viobot/image_left
+image1_topic: /viobot/image_right
+imu_topic: "/viobot/imu"
+# cam_calib_path: /root/lwx_dataset/config/44_calib_vo.json
+# cam_calib_path: /root/stereo3_ws/install/share/stereo3/config/173_calib_vo.json
+# cam_calib_path: /root/dev/stereo3_ros1_ws/install/share/stereo3/config/173_calib_vo.json
+cam_calib_path: /root/dev/stereo3_ros1_ws/install/share/stereo3/config/sports_field_calib.json
+# cam_calib_path: /home/ll/C/ws/basalt-lwx-ws/src/basalt-lwx/config/sports_field_calib.json
+dataset_path: ""
+dataset_type: ""
+# config_path: /root/lwx_dataset/config/44_vio_config.json
+# config_path: /root/stereo3_ws/install/share/stereo3/config/vio_config.json
+# config_path: /root/dev/stereo3_ros1_ws/install/share/stereo3/config/vio_config.json
+config_path: /root/dev/stereo3_ros1_ws/install/share/stereo3/config/sports_field_config.json
+# config_path: /home/ll/C/ws/basalt-lwx-ws/src/basalt-lwx/config/sports_field_config.json
+result_path: ""
+trajectory_fmt: ""
+trajectory_groundtruth: false
+num_threads: 0
+use_imu: true
+use_double: true
+dt_ns: 0
+fps: 50
+coefficient: 1.0 # 1.026
+slow_velocity: 2 # 0.01 # 3
+zero_velocity: 0.061
+mean_value: 68.1
+
+tks_pro_integration: false
+src_ip_address: 192.168.55.28
+dest_ip_adderss: 192.168.55.21
+debug_mode: false
+output_data_file: /root/lwx_dataset/data_output/
+data_output: true
+data_display: false
+bag_flag: true
+atp_id: 4865
+
+record_bag: false # false - indicate manual mode which means press 'w' to start and 'x' to stop recording bag file.
+record_duration: 180 # the duration of recording bag in automatic mode.The unit is seconds 
+output_log: true
+
+min_tracked_points: 2
+
+FAST_min_threshold: 5
+FAST_threshold: 40
+extract_one_time: false
+FAST_algorithm: true # if false, use goodFeaturesToTrack to select shi-Tomas corners.
+skip_top_ratio: 0.0
+skip_bottom_ratio: 0.0
+skip_left_ratio: 0.0
+skip_right_ratio: 0.0
+max_init_depth: 0
+equalize: false
+max_intensity: 230
+kf_q: 0.1
+kf_r: 2.0
+
+manual_set_intensity_diff: false
+manual_intensity_diff_threshold: 0.34
+
+# photometric parameter
+photometric_calibration: false
+image_width: 640
+image_height: 480
+
+camera1:
+  # gamma: "/root/photometric_calibration/44/pcalib1.txt"
+  gamma: "/root/photometric_calibration/173/pcalib1.txt"
+  # vignette: "/root/photometric_calibration/44/vignette1.png"
+  vignette: "/root/photometric_calibration/173/vignette1.png"
+  
+camera2:
+  # gamma: "/root/photometric_calibration/44/pcalib2.txt"
+  gamma: "/root/photometric_calibration/173/pcalib2.txt"
+  # vignette: "/root/photometric_calibration/44/vignette2.png"
+  vignette: "/root/photometric_calibration/173/vignette2.png"
+
+confidence_interval: 
+   tracked_points: [30]
+   confidence_levels: [0.0]
+
+# extrinsic parameter between IMU and Camera: from camera frame to imu frame, imu^R_cam0 
+body_T_cam0: 
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ -9.9999304088183916e-01, -1.4807612280684276e-03,-3.4242567190873262e-03, 4.4607355399578330e-02,
+           -1.4727585076285627e-03, 9.9999618140394653e-01,-2.3384096953731918e-03, 1.2325876739317486e-03,
+           3.4277062696463807e-03, -2.3333503188884726e-03,-9.9999140311605617e-01, -2.7600224304489100e-02,
+           0., 0., 0., 1. ]
+
+#loop closure parameters
+load_previous_pose_graph: false        # load and reuse previous pose graph; load from 'pose_graph_save_path'
+pose_graph_save_path: "/home/lwx/map_file_and_pose_graph/office_pose_graph/pose_graph/" # save and load path
+add_keyframe_mode: 1            # 0 for close, 1 for open
+debug_image: true
+
+
+imu_T_gnss: # imu2gnss imu:XYZ - left-down-back 
+   rows: 3
+   cols: 1
+   dt: d
+   data: [ 0., 0., 0.]
