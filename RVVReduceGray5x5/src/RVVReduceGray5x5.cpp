@@ -212,6 +212,7 @@ namespace wx::Simd
             // vbool16_t __riscv_vlm_v_b16(const uint8_t *rs1, size_t vl);
 
             // vuint8m1_t __riscv_vcompress_vm_u8m1(vuint8m1_t vs2, vbool8_t vs1, size_t vl);
+            // PS: [TODO] vec_mask可以在最外层调用的地方加载，提供给所有的图片使用，效率更高
             vbool8_t vec_mask = __riscv_vmseq_vx_i8m1_b8(__riscv_vle8_v_i8m1(mask_flag, vlmax), 1, vlmax);
             vec_u8_result = __riscv_vcompress_vm_u8m1(vec_u8_result, vec_mask, vl);
             __riscv_vse8_v_u8m1(dst, vec_u8_result, vl / 2);
