@@ -37,6 +37,9 @@ image0_topic: /baton/image_left
 image1_topic: /baton/image_right
 imu_topic: "/baton/imu"
 
+fisheye_mask: /root/lwx_dataset/compile_humble/root/lwx/rvv_tutorial/optical_flow_ws/src/optical_flow_test/config/s3_fisheye_mask.png
+fisheye: 1
+
 # image0_topic: /cam0/image_raw
 # image1_topic: /cam1/image_raw
 # imu_topic: "/imu0"

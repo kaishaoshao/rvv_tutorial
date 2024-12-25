@@ -133,6 +133,9 @@ struct TYamlIO
 
     int motion_flag = 1; // 0 -- staionary; 1 -- normal; 2 -- aggressive
 
+    int fisheye { 0 };
+    std::string fisheye_mask {};
+
     void ReadConfiguration(std::string sys_yaml_file = "");
 #ifdef _NEED_WRITE_YAML    
     void WriteConfiguration();

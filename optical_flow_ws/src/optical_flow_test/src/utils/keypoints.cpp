@@ -277,6 +277,7 @@ void detectKeypoints(
              i++)
           if (img_raw.InBounds(x + points[i].pt.x, y + points[i].pt.y,
                                EDGE_THRESHOLD)) {
+            // if (fisheye_mask.at<uchar>(cv::Point2f(x + points[i].pt.x, y + points[i].pt.y)) == 0) continue ;
             kd.corners.emplace_back(x + points[i].pt.x, y + points[i].pt.y);
             points_added++;
           }

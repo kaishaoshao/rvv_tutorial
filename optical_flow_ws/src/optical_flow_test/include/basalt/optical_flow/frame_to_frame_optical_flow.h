@@ -65,6 +65,14 @@ extern std::condition_variable vio_cv;
 
 #include <atomic>
 
+#include "../../src/wx_yaml_io.h"
+using namespace wx;
+extern TYamlIO* g_yaml_ptr;
+
+using std::vector;
+using std::pair;
+using std::make_pair;
+
 namespace basalt {
 
 /// Unlike PatchOpticalFlow, FrameToFrameOpticalFlow always tracks patches
@@ -141,7 +149,42 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       // if (mask.size() != forw_img.size())
           // cout << "wrong size " << endl;
     }
-#endif    
+#endif 
+
+    // opencv optical flow on 2024-12-24
+    // row & col: calib.resolution[0].x(), calib.resolution[0].y()
+    COL = calib.resolution[0].x();
+    ROW = calib.resolution[0].y();
+    std::cout << "COL=" << COL << " ROW=" << ROW << std::endl;
+    // cv::Mat::Mat	(	int 	rows,
+    //                 int 	cols,
+    //                 int 	type 
+    //               )	
+    forw_img[0] = cv::Mat::zeros(ROW, COL, CV_8UC1);  // CV_8UC3
+    forw_img[1] = cv::Mat::zeros(ROW, COL, CV_8UC1);  // CV_8UC3
+
+    FISHEYE = g_yaml_ptr->fisheye;
+    if(FISHEYE)
+    {
+      fisheye_mask = cv::imread(g_yaml_ptr->fisheye_mask, 0);
+      if(!fisheye_mask.data)
+      {
+        std::cout << ("load mask fail") << std::endl;
+        // ROS_BREAK();
+        FISHEYE = 0;
+      }
+      else
+        std::cout << ("load mask success") << std::endl;
+    }
+
+    x_start = (COL % grid_size_) / 2;
+    x_stop = x_start + grid_size_ * (COL / grid_size_ - 1);
+
+    y_start = (ROW % grid_size_) / 2;
+    y_stop = y_start + grid_size_ * (ROW / grid_size_ - 1);
+
+    cells.setZero(ROW / grid_size_ + 1, COL / grid_size_ + 1);
+
   }
 
   ~FrameToFrameOpticalFlow() { processing_thread->join(); }
@@ -242,6 +285,331 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     }
   }
 
+  //
+  bool inBorder(const cv::Point2f &pt)
+  {
+      const int BORDER_SIZE = 1;
+      int img_x = cvRound(pt.x);
+      int img_y = cvRound(pt.y);
+      return BORDER_SIZE <= img_x && img_x < COL - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < ROW - BORDER_SIZE;
+  }
+
+  void reduceVector(vector<cv::Point2f> &v, vector<uchar> status)
+  {
+      int j = 0;
+      int size = int(v.size());
+      // for (int i = 0; i < int(v.size()); i++)
+      for (int i = 0; i < size; i++)
+          if (status[i])
+              v[j++] = v[i];
+      v.resize(j);
+  }
+
+  void reduceVector(vector<int> &v, vector<uchar> status)
+  {
+      int j = 0;
+      int size = int(v.size());
+      for (int i = 0; i < size; i++)
+          if (status[i])
+              v[j++] = v[i];
+      v.resize(j);
+  }
+
+  void setMask2(vector<cv::Point2f>& forw_pts, vector<int>& track_cnt, vector<int>& ids)
+  {
+    cells.setZero(ROW / grid_size_ + 1, COL / grid_size_ + 1);
+
+    // prefer to keep features that are tracked for long time
+    vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
+
+    for (unsigned int i = 0; i < forw_pts.size(); i++)
+        cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
+
+    // 按点被跟踪的次数倒序排序
+    sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair<cv::Point2f, int>> &a, const pair<int, pair<cv::Point2f, int>> &b)
+        {
+            return a.first > b.first;
+        });
+
+    forw_pts.clear();
+    ids.clear();
+    track_cnt.clear();
+
+    for (auto &it : cnt_pts_id)
+    {
+      const cv::Point2f &p = it.second.first;
+      // if (mask.at<uchar>(it.second.first) == 255) continue ;
+      if (fisheye_mask.at<uchar>(it.second.first) == 0) continue ;
+
+      if (p.x >= x_start && p.y >= y_start && p.x < x_stop + grid_size_ &&
+        p.y < y_stop + grid_size_) {
+        int x = (p.x - x_start) / grid_size_;
+        int y = (p.y - y_start) / grid_size_;
+
+        if(cells(y, x) == 0)
+        {
+          forw_pts.push_back(it.second.first);
+          ids.push_back(it.second.second);
+          track_cnt.push_back(it.first);
+
+          cells(y, x) = 1;
+        }
+
+      }
+
+    }
+  }
+
+  void setMask(vector<cv::Point2f>& forw_pts, vector<int>& track_cnt, vector<int>& ids)
+  {
+    if(FISHEYE)
+        mask = fisheye_mask.clone();
+    else
+        mask = cv::Mat(ROW, COL, CV_8UC1, cv::Scalar(255)); // 构建一个纯白色的图像
+    
+
+    // prefer to keep features that are tracked for long time
+    vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
+
+    for (unsigned int i = 0; i < forw_pts.size(); i++)
+        cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
+
+    // 按点被跟踪的次数倒序排序
+    sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair<cv::Point2f, int>> &a, const pair<int, pair<cv::Point2f, int>> &b)
+        {
+            return a.first > b.first;
+        });
+
+    forw_pts.clear();
+    ids.clear();
+    track_cnt.clear();
+
+    for (auto &it : cnt_pts_id)
+    {
+        if (mask.at<uchar>(it.second.first) == 255)
+        {
+            // 如果点对应于mask图像所在的位置是白色的，那么就保留该点
+            forw_pts.push_back(it.second.first);
+            ids.push_back(it.second.second);
+            track_cnt.push_back(it.first);
+            
+            /*
+            void cv::circle	(InputOutputArray 	img,
+                            Point 	            center,
+                            int 	            radius,
+                            const Scalar & 	color,
+                            int 	            thickness = 1,
+                            int 	            lineType = LINE_8,
+                            int 	            shift = 0 
+                            )
+            */
+            // 同时以该点为圆心，在半径为MIN_DIST的范围内将mask对应区域的点颜色置为黑色。那么下次其它点落在该区域的全部都被剔除掉了。
+            cv::circle(mask, it.second.first, MIN_DIST, 0, -1);
+        }
+    }
+  }
+
+  void detectKeypoints2(
+    const basalt::Image<const uint16_t>& img_raw, KeypointsData& kd,
+    int PATCH_SIZE, int num_points_cell,
+    const Eigen::aligned_vector<Eigen::Vector2d>& current_points/*, const cv::Mat &fisheye_mask*/) {
+  
+  // 清空输出结果容器
+  kd.corners.clear();
+  kd.corner_angles.clear();
+  kd.corner_descriptors.clear();
+
+  // 提取的特征点具有中心对称，即提取的特征点均匀分布在图像的中间, 意味着不能被PATCH_SIZE整除时，边边角角的地方就不会拿来选点
+  // 比如对于PATCH_SIZE=50，640 * 480的图像来说x_start=20, x_stop=570, y_start=15, y_stop=415
+  // 那么选的点的范围是：coloumn pixel ∈ [20, 620]，row pixel ∈ [15, 465].
+  const size_t x_start = (img_raw.w % PATCH_SIZE) / 2;
+  const size_t x_stop = x_start + PATCH_SIZE * (img_raw.w / PATCH_SIZE - 1);
+
+  const size_t y_start = (img_raw.h % PATCH_SIZE) / 2;
+  const size_t y_stop = y_start + PATCH_SIZE * (img_raw.h / PATCH_SIZE - 1);
+
+  //  std::cerr << "x_start " << x_start << " x_stop " << x_stop << std::endl;
+  //  std::cerr << "y_start " << y_start << " y_stop " << y_stop << std::endl;
+
+  // 计算cell的总个数， cell按照矩阵的方式排列：e.g. 480 / 80 + 1, 640 / 80 + 1
+  Eigen::MatrixXi cells;
+  cells.setZero(img_raw.h / PATCH_SIZE + 1, img_raw.w / PATCH_SIZE + 1);
+
+  // 统计已拥有的特征点在对应栅格cell中出现的个数
+  for (const Eigen::Vector2d& p : current_points) {
+    if (p[0] >= x_start && p[1] >= y_start && p[0] < x_stop + PATCH_SIZE &&
+        p[1] < y_stop + PATCH_SIZE) {
+      int x = (p[0] - x_start) / PATCH_SIZE;
+      int y = (p[1] - y_start) / PATCH_SIZE;
+      // cells记录每个cell中成功追踪的特征点数
+      cells(y, x) += 1;
+    }
+  }
+
+  // 2024-5-22.
+  // const size_t skip_count = (y_stop - y_start) * 1 / (PATCH_SIZE * 2) + 1;
+  const size_t cell_rows = img_raw.h / PATCH_SIZE;
+  const size_t cell_cols = img_raw.w / PATCH_SIZE;
+  const size_t skip_top_count = std::ceil(cell_rows * g_yaml_ptr->skip_top_ratio); // 0.5
+  const size_t skip_bottom_count = std::ceil(cell_rows * g_yaml_ptr->skip_bottom_ratio);
+  const size_t skip_left_count = std::ceil(cell_cols * g_yaml_ptr->skip_left_ratio);
+  const size_t skip_right_count = std::ceil(cell_cols * g_yaml_ptr->skip_right_ratio);
+  const size_t x_start2 = x_start + skip_left_count * PATCH_SIZE;
+  const size_t x_stop2 = x_stop - skip_right_count * PATCH_SIZE;
+  const size_t y_start2 = y_start + skip_top_count * PATCH_SIZE;
+  const size_t y_stop2 = y_stop - skip_bottom_count * PATCH_SIZE;
+  // std::cout << "y_start=" << y_start << " y_stop=" << y_stop << "y_start2=" << y_start2 << "PATCH_SIZE=" << PATCH_SIZE << std::endl;
+  // the end.
+
+  // for (size_t x = x_start; x <= x_stop; x += PATCH_SIZE) {
+  for (size_t x = x_start2; x <= x_stop2; x += PATCH_SIZE) {
+    // for (size_t y = y_start; y <= y_stop; y += PATCH_SIZE) {
+    for (size_t y = y_start2; y <= y_stop2; y += PATCH_SIZE) {
+
+      // 已经拥有特征点的栅格不再提取特征点
+      if (cells((y - y_start) / PATCH_SIZE, (x - x_start) / PATCH_SIZE) > 0)
+        continue;
+
+      const basalt::Image<const uint16_t> sub_img_raw =
+          img_raw.SubImage(x, y, PATCH_SIZE, PATCH_SIZE);
+
+      cv::Mat subImg(PATCH_SIZE, PATCH_SIZE, CV_8U);
+
+      // 16bit 移位操作只取后8位，因为原始图像存放在高8位
+      for (int y = 0; y < PATCH_SIZE; y++) {
+        uchar* sub_ptr = subImg.ptr(y);
+        for (int x = 0; x < PATCH_SIZE; x++) {
+          sub_ptr[x] = (sub_img_raw(x, y) >> 8); // 将图像转换为cv::Mat格式
+        }
+      }
+// #ifndef _GOOD_FEATURE_TO_TRACK_
+//#if 0//_GOOD_FEATURE_TO_TRACK_ == 0
+    if(g_yaml_ptr->FAST_algorithm)
+    {
+      int points_added = 0;
+      int threshold = g_yaml_ptr->FAST_threshold;//40;
+      // 每个cell 提取一定数量的特征点，阈值逐渐减低的
+      // while (points_added < num_points_cell && threshold >= 5) {
+      while (points_added < num_points_cell && threshold >= g_yaml_ptr->FAST_min_threshold) {
+        std::vector<cv::KeyPoint> points;
+        cv::FAST(subImg, points, threshold); // 对每一个grid提取一定数量的FAST角点
+        // cv::FAST(subImg, points, g_yaml_ptr->FAST_threshold); // 对每一个grid提取一定数量的FAST角点
+        // 以下是关于FAST角点的一些分析：
+        // FAST算法将要检测的像素作为圆心，当具有固定半径的圆上的其他像素与圆心的像素之间的灰度差足够大时，该点被认为是角点。
+        // 然而，FAST角点不具有方向和尺度信息，它们不具有旋转和尺度不变性。
+        // 2012年，Rublee等人（2012）提出了基于FAST角点和BRIEF描述符的定向FAST和旋转BRIEF（ORB）算法。
+        // 该算法首先在图像上构建图像金字塔，然后检测FAST关键点并计算关键点的特征向量。
+        // ORB的描述符采用了二进制字符串特征BRIEF描述符的快速计算速度（Michael等人，2010），
+        // 因此ORB计算速度比具有实时特征检测的fast算法更快。此外ORB受噪声影响较小，具有良好的旋转不变性和尺度不变性，可应用于实时SLAM系统。
+        // 2016年，Chien等人（2016）比较并评估了用于VO应用的SIFT、SURF和ORB特征提取算法。
+        // 通过对KITTI数据集的大量测试（Geiger等人，2013），可以得出结论，SIFT在提取特征方面最准确，而ORB的计算量较小。
+        // 因此，作为计算能力有限的嵌入式计算机，ORB方法被认为更适合自动驾驶车辆的应用。
+        // ORB描述子，或者说基于ORB的特征点，是目前最好的选择了。
+
+        // 按照特征响应强度排序，避免角点集中（扎堆）的问题。
+        std::sort(points.begin(), points.end(),
+                  [](const cv::KeyPoint& a, const cv::KeyPoint& b) -> bool {
+                    return a.response > b.response;
+                  });
+
+        //        std::cout << "Detected " << points.size() << " points.
+        //        Threshold "
+        //                  << threshold << std::endl;
+
+        // 只取前n个特征点，且判断是否在指定范围内
+        for (size_t i = 0; i < points.size() && points_added < num_points_cell;
+             i++)
+          if (img_raw.InBounds(x + points[i].pt.x, y + points[i].pt.y,
+                               EDGE_THRESHOLD)) {
+            if (fisheye_mask.at<uchar>(cv::Point2f(x + points[i].pt.x, y + points[i].pt.y)) == 0) continue ;
+            kd.corners.emplace_back(x + points[i].pt.x, y + points[i].pt.y);
+            points_added++;
+          }
+
+        if(g_yaml_ptr->extract_one_time) break;
+
+        // 如果没有满足数量要求，降低阈值
+        threshold /= 2;
+      }
+    }  
+// #else
+      else //if(1) // 尝试shi-Tomas角点提取
+      {
+        std::vector<cv::Point2f> tmp_pts;
+        // 第八个参数用于指定角点检测的方法, 默认为false, 如果是true则使用Harris角点检测，false则使用Shi Tomasi算法
+        // cv::goodFeaturesToTrack(subImg, tmp_pts, num_points_cell, 0.01, 10); // 提取一个点
+        // cv::goodFeaturesToTrack(subImg, tmp_pts, num_points_cell, 0.01, 8, mask); // 提取一个点
+        // cv::goodFeaturesToTrack(subImg, tmp_pts, num_points_cell, 0.01, 8); // 提取一个点
+        // 假设最好的点是100，最差的点就是100 *0.1，低于最差的点被reject
+        // The corners with the quality measure less than the product are rejected. 
+        // For example, if the best corner has the quality measure = 1500, and the qualityLevel=0.01 , 
+        // then all the corners with the quality measure less than 15 are rejected.
+        cv::goodFeaturesToTrack(subImg, tmp_pts, num_points_cell, 0.1, 8); // 提取一个点
+
+        // 2024-5-23
+        //指定亚像素计算迭代标注
+	      cv::TermCriteria criteria = cv::TermCriteria(
+					cv::TermCriteria::MAX_ITER + cv::TermCriteria::EPS,
+					40,
+					0.01);
+
+        //亚像素检测
+        if(tmp_pts.size() > 0)
+	      cv::cornerSubPix(subImg, tmp_pts, cv::Size(5, 5), cv::Size(-1, -1), criteria);
+        // the end.
+
+        if (tmp_pts.size() > 0 && img_raw.InBounds(x + tmp_pts[0].x, y + tmp_pts[0].y,
+                              //  EDGE_THRESHOLD)) {
+                               0)) {
+            // std::cout << "add new point" << std::endl;
+            // float val = img_raw.interp(x + tmp_pts[0].x, y + tmp_pts[0].y) >> 8;
+
+            // 使用bilinear interpolation
+            int ix = (int)(x + tmp_pts[0].x);
+            int iy = (int)(y + tmp_pts[0].y);
+
+            float dx = x + tmp_pts[0].x - ix; // 小数部分
+            float dy = y + tmp_pts[0].y - iy;
+
+            float ddx = float(1.0) - dx;
+            float ddy = float(1.0) - dy;
+
+            // 双线性插值
+            float val = ddx * ddy * (img_raw(ix, iy) >> 8) + ddx * dy * (img_raw(ix, iy + 1) >> 8) +
+                  dx * ddy * (img_raw(ix + 1, iy) >> 8) + dx * dy * (img_raw(ix + 1, iy + 1) >> 8);
+
+            // if(val <= 255)
+            if(val <= g_yaml_ptr->max_intensity)
+            {
+              kd.corners.emplace_back(x + tmp_pts[0].x, y + tmp_pts[0].y);
+            }
+            // else
+            // {
+            //   std::cout << "val=" << val << std::endl;
+            // }
+
+          }
+      }
+// #endif
+    } //for (size_t y
+  } //for (size_t x
+
+  // std::cout << "Total points: " << kd.corners.size() << std::endl;
+
+  //  cv::TermCriteria criteria =
+  //      cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 40, 0.001);
+  //  cv::Size winSize = cv::Size(5, 5);
+  //  cv::Size zeroZone = cv::Size(-1, -1);
+  //  cv::cornerSubPix(image, points, winSize, zeroZone, criteria);
+
+  //  for (size_t i = 0; i < points.size(); i++) {
+  //    if (img_raw.InBounds(points[i].pt.x, points[i].pt.y, EDGE_THRESHOLD)) {
+  //      kd.corners.emplace_back(points[i].pt.x, points[i].pt.y);
+  //    }
+  //  }
+}
+  // the end.
+
   // processFrame这里进行图像金字塔创建+跟踪+剔除特征点
   void processFrame(int64_t curr_t_ns, OpticalFlowInput::Ptr& new_img_vec) {
     
@@ -249,6 +617,28 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     for (const auto& v : new_img_vec->img_data) {
       if (!v.img.get()) return;
     }
+
+    // opencv optical flow on 2024-12-24
+    // convert image
+    uint16_t* data_in = nullptr;
+    uint8_t* data_out = nullptr;
+    for(size_t i = 0; i < calib.intrinsics.size(); i++)
+    // for(size_t i = 0; i < 1; i++) // TODO
+    {
+      basalt::ImageData imageData = new_img_vec->img_data[i];
+
+      data_in = imageData.img->ptr;
+      // forw_img = cv::Mat::zeros(imageData.img->h, imageData.img->w, CV_8UC1);  // CV_8UC3
+      data_out = forw_img[i].ptr();
+
+      size_t full_size = imageData.img->size();  // forw_img.cols * forw_img.rows;
+      for (size_t i = 0; i < full_size; i++) {
+        int val = data_in[i];
+        val = val >> 8;
+        data_out[i] = val;
+      }
+    }
+    // the end.
     
     if (t_ns < 0) { // 第一次进入: 第一次处理帧时，t_ns == -1.
       // 开始初始化
@@ -292,7 +682,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       // std::cout << "optical flow: cam0 observation count: " << transforms->observations.at(0).size() << std::endl;
       std::cout << "optical flow: cam0 observation count: " << transforms->observations.at(0).size() 
         << " / cam1 obs count: " << transforms->observations.at(1).size() << std::endl;
-
+      
+      
       /*
        * comment on 2024-12-22.  
       if(transforms->observations.at(0).size() <= 0)
@@ -314,7 +705,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
       // step 1: 更新时间
       t_ns = curr_t_ns; // 拷贝时间戳
-
+#if 0
       // step 2.1: 更新last image的金子塔
       old_pyramid = pyramid; // 保存上一图像的金字塔
 
@@ -342,6 +733,71 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                     transforms->observations[i],
                     new_transforms->observations[i]);
       }
+#else
+      // TODO: use opencv Lk optical flow
+      
+      /*
+      void cv::calcOpticalFlowPyrLK	(	InputArray 	prevImg,
+                                      InputArray 	nextImg,
+                                      InputArray 	prevPts,
+                                      InputOutputArray 	nextPts,
+                                      OutputArray 	status,
+                                      OutputArray 	err,
+                                      Size 	winSize = Size(21, 21),
+                                      int 	maxLevel = 3,
+                                      TermCriteria 	criteria = TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 0.01),
+                                      int 	flags = 0,
+                                      double 	minEigThreshold = 1e-4 
+                                    )
+      */
+      //
+
+      OpticalFlowResult::Ptr new_transforms; // 新的返回参数
+      new_transforms.reset(new OpticalFlowResult);
+      new_transforms->observations.resize(calib.intrinsics.size());
+      new_transforms->t_ns = t_ns;
+      
+      vector<uchar> status;
+      vector<float> err;
+
+      for (size_t i = 0; i < calib.intrinsics.size(); i++) 
+      // for (size_t i = 0; i < 1; i++) // TODO
+      {
+        forw_pts[i].clear();
+
+        // prev cam0 to current cam0  &  prev cam1 to current cam1
+        status.clear();
+        cv::calcOpticalFlowPyrLK(cur_img[i], forw_img[i], cur_pts[i], forw_pts[i], status, err, cv::Size(21, 21), 3);
+        // if(i == 0) std::cout << "cur_pts[0]=" << cur_pts[i].size() << " forw_pts[0]=" << forw_pts[i].size() << std::endl;
+
+        int size = int(forw_pts[i].size());
+        for (int j = 0; j < size; j++)
+            // Step 2 通过图像边界剔除outlier
+            if (status[j] && !inBorder(forw_pts[i][j]))    // 追踪状态好检查在不在图像范围
+                status[j] = 0;
+
+        // reduceVector(cur_pts, status);
+        reduceVector(forw_pts[i], status);
+        reduceVector(kpt_ids[i], status);  // 特征点的id
+        reduceVector(track_cnt[i], status);    // 追踪次数
+
+        // setMask(forw_pts[i], track_cnt[i], kpt_ids[i]);
+        setMask2(forw_pts[i], track_cnt[i], kpt_ids[i]);
+
+        size = forw_pts[i].size();
+        // if(i == 0) std::cout << "after filter: forw_pts[i]=" << forw_pts[i].size() << std::endl;    
+        for(int j = 0; j < size; j++)
+        {
+          // 
+          Eigen::AffineCompact2f transform;
+          transform.setIdentity(); //旋转 设置为单位阵
+          transform.translation() = Eigen::Vector2d(forw_pts[i][j].x, forw_pts[i][j].y).cast<Scalar>(); // kd.corners[i].cast<Scalar>(); // 角点坐标，保存到transform的平移部分
+          new_transforms->observations[i].emplace(kpt_ids[i][j], std::make_pair(transform, track_cnt[i][j] + 1));
+        }
+
+      }
+      // the end.
+#endif
 
       // step 4: save track result
       transforms = new_transforms; // 这里transforms重新赋值追踪之后的特征点
@@ -353,6 +809,31 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       filterPoints(); // 使用双目E剔除点
       // 追踪结束
     }
+
+    // opencv optical flow
+    for(size_t i = 0; i < calib.intrinsics.size(); i++)
+    // for (size_t i = 0; i < 1; i++) // TODO
+    {
+      track_cnt[i].clear();
+      kpt_ids[i].clear();
+      // forw_pts[i].clear();
+      cur_pts[i].clear();
+
+      for (const auto& kv_obs : transforms->observations[i]) {
+        // int kpt_id = kv_obs.first; // key point id
+        Eigen::Matrix<Scalar, 2, 1> pos = kv_obs.second.first.translation().cast<Scalar>();
+        // forw_pts[i].emplace_back(cv::Point2f(pos.x(), pos[1]));
+        cur_pts[i].emplace_back(cv::Point2f(pos.x(), pos[1]));
+
+        kpt_ids[i].emplace_back(kv_obs.first);
+        track_cnt[i].emplace_back(kv_obs.second.second);
+      }
+
+      // cur_img[i] = forw_img[i];
+      cur_img[i] = forw_img[i].clone();
+      // cur_pts[i] = forw_pts[i];
+    }
+    // the end.
 
 
     // show track
@@ -691,7 +1172,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                     config.optical_flow_detection_grid_size, 1, pts0);                
 */
     
-    detectKeypoints(pyramid->at(0).lvl(0), kd, grid_size_, 1, pts0);
+    // detectKeypoints(pyramid->at(0).lvl(0), kd, grid_size_, 1, pts0);
+    detectKeypoints2(pyramid->at(0).lvl(0), kd, grid_size_, 1, pts0);
     // detectKeypoints(pyramid->at(0).lvl(0), kd, grid_size_, 1, pts0, mask);
 
     Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>> new_poses0,
@@ -819,6 +1301,36 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 // #ifdef _CALC_TIME_
   // clock_t clock_one_point = 0;
 // #endif
+
+/*
+  vector<cv::Point2f> prev_pts, cur_pts, forw_pts;
+  cv::Mat prev_img, cur_img, forw_img;
+*/
+
+  vector<cv::Point2f> cur_pts[2], forw_pts[2];
+  cv::Mat cur_img[2], forw_img[2];
+
+  int ROW;
+  int COL;
+  int FISHEYE { 0 };
+  int MIN_DIST = 30;
+  cv::Mat mask;
+  cv::Mat fisheye_mask;
+
+  vector<int> kpt_ids[2];
+  vector<int> track_cnt[2];
+
+  size_t x_start;
+  size_t x_stop;
+
+  size_t y_start;
+  size_t y_stop;
+
+  // 计算cell的总个数， cell按照矩阵的方式排列：e.g. 480 / 80 + 1, 640 / 80 + 1
+  Eigen::MatrixXi cells;
+
+  constexpr static int EDGE_THRESHOLD = 19;
+
 };
 
 }  // namespace basalt

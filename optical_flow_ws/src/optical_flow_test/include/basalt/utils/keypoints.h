@@ -46,7 +46,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <basalt/utils/common_types.h>
 #include <basalt/camera/generic_camera.hpp>
 
-// #include <opencv2/opencv.hpp> // 2024-5-22
+#include <opencv2/opencv.hpp> // 2024-5-22
 
 namespace basalt {
 

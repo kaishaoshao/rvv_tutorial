@@ -133,6 +133,8 @@ void TYamlIO::ReadConfiguration(std::string sys_yaml_file)
     config["FAST_min_threshold"] = FAST_min_threshold;
     config["extract_one_time"] = extract_one_time;
     config["add_keyframe_mode"] = add_keyframe_mode;
+    config["fisheye"] = fisheye;
+    config["fisheye_mask"] = fisheye_mask;
 
 /*
     std::vector<double> vector_T{1.0, 0.0, 0.0, 0.0,
@@ -390,6 +392,12 @@ void TYamlIO::ReadConfiguration(std::string sys_yaml_file)
 
     if(config["add_keyframe_mode"].Type() == YAML::NodeType::Scalar)
     add_keyframe_mode = config["add_keyframe_mode"].as<int>();
+
+    if(config["fisheye"].Type() == YAML::NodeType::Scalar)
+    fisheye = config["fisheye"].as<int>();
+
+    if(config["fisheye_mask"].Type() == YAML::NodeType::Scalar)
+    fisheye_mask = config["fisheye_mask"].as<std::string>();
 
     // read imu_cam extrinsic
     std::vector<double> vector_T{1.0, 0.0, 0.0, 0.0,
