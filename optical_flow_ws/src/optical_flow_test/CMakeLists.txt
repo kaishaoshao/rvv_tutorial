@@ -23,10 +23,6 @@ else()
 endif()
 message(STATUS "3 CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 
-# for gdb debug
-# SET(CMAKE_BUILD_TYPE "Debug")
-# SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0 -Wall -g -ggdb")
-# SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
 # SET(CMAKE_BUILD_TYPE "RelWithDebInfo")
 # # set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g") # cmake default: "-O2 -g -DNDEBUG"
@@ -39,6 +35,11 @@ SET(CMAKE_BUILD_TYPE "Release")
 # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv_zba_zbb_zbc_zbs -fno-tree-vectorize -fno-tree-loop-vectorize")
 
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+
+# for gdb debug
+# SET(CMAKE_BUILD_TYPE "Debug")
+# SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0 -Wall -g -ggdb")
+# SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
 # find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
