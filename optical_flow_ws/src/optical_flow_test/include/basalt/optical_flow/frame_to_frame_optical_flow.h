@@ -71,13 +71,22 @@ extern TYamlIO* g_yaml_ptr;
 
 #include "DS_cam.hpp"
 
-#define _CV_OF_PYR_LK_
+#include <unordered_map>
+
+// #define _CV_OF_PYR_LK_
 
 using std::vector;
 using std::pair;
 using std::make_pair;
 
 namespace basalt {
+
+  enum TrackFailedReason
+  {
+    FORW_FLOW_FAILED = 1, // Forward Optical Flow
+    BACK_FLOW_FAILED, // Backward Optical Flow
+    GT_MAX_RECOVERED_DIS, // great than optical_flow_max_recovered_dist2
+  };
 
 /// Unlike PatchOpticalFlow, FrameToFrameOpticalFlow always tracks patches
 /// against the previous frame, not the initial frame where a track was created.
@@ -941,7 +950,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
       // step4: 添加特征点（因为是第一帧，故而直接提取新的特征点）
       addPoints();
-#else     
+#else
+      transforms->input_images = new_img_vec;     
       addPoints2(forw_img[0], forw_img[1]);
 #endif      
       // step5: 使用对极几何剔除外点
@@ -998,9 +1008,24 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
       // lwx: last left to current left , last right to current right // 对当前帧的和上一帧进行跟踪（左目与左目 右目与右目）
       for (size_t i = 0; i < calib.intrinsics.size(); i++) {
+        if(i == 0)
+        {
+          forw_track_failed_cnt = 0;
+          back_track_failed_cnt = 0;
+          gt_max_recovered_dis_cnt = 0;
+        }
         trackPoints(old_pyramid->at(i), pyramid->at(i),
                     transforms->observations[i],
                     new_transforms->observations[i]);
+
+        if(i == 0)
+        {
+          std::ostringstream oss;
+          oss << "forw_track_failed_cnt=" << forw_track_failed_cnt << " back_track_failed_cnt="
+            << back_track_failed_cnt << " gt_max_recovered_dis_cnt=" << gt_max_recovered_dis_cnt << std::endl;
+          
+          std::cout << oss.str();
+        }            
       }
 #else
       // TODO: use opencv Lk optical flow
@@ -1198,7 +1223,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                    const Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>&
                        transform_map_1, // 1中的点
                    Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>&
-                       transform_map_2) const { // 用于返回追踪到的点
+                       transform_map_2) /*const*/ { // 用于返回追踪到的点
     // num_points为1中点的个数
     size_t num_points = transform_map_1.size();
 
@@ -1262,11 +1287,30 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
             if (dist2 < config.optical_flow_max_recovered_dist2) {
               // result[id] = transform_2;
               result[id.first] = std::make_pair(transform_2, id.second + 1);
-              // id.second += 1;
-              // result[std::make_pair(id.first, id.second + 1)] = transform_2;
             }
+            // 2024-12-27.
+            else
+            {
+              // map_track_failed.emplace(id.first, GT_MAX_RECOVERED_DIS);
+              gt_max_recovered_dis_cnt++;
+            }
+            // the end.
           }
+          // 2024-12-27.
+          else
+          {
+            // map_track_failed.emplace(id.first, BACK_FLOW_FAILED);
+            back_track_failed_cnt++;
+          }
+          // the end.
         }
+        // 2024-12-27.
+        else
+        {
+          // map_track_failed.emplace(id.first, FORW_FLOW_FAILED);
+          forw_track_failed_cnt++;
+        }
+        // the end.
       }
     };
 
@@ -1691,6 +1735,11 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
   std::shared_ptr<hm::DoubleSphereCamera> ds_cam[2];
   int FOCAL_LENGTH[2];
   double F_THRESHOLD = 1.0;
+
+  // std::unordered_map<KeypointId, TrackFailedReason> map_track_failed;
+  int forw_track_failed_cnt = 0;
+  int back_track_failed_cnt = 0;
+  int gt_max_recovered_dis_cnt = 0;
 
 };
 
