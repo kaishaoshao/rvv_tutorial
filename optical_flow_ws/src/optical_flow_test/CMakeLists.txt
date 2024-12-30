@@ -42,7 +42,16 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 # SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
 # find_package(Eigen3 REQUIRED)
-find_package(OpenCV REQUIRED)
+
+# 查找 OpenCV 库
+# find_package(OpenCV REQUIRED)
+find_package(OpenCV 4 REQUIRED)
+message(STATUS "OpenCV Version: ${OpenCV_VERSION}")
+
+# 输出 OpenCV 的版本信息
+message(STATUS "Found OpenCV version: ${OpenCV_VERSION}")
+
+# message(STATUS "Found Eigen3 version: ${EIGEN3_VERSION}")
 
 set(Eigen3_DIR "/root/SETUP/eigen-3.4.0_install/share/eigen3/cmake")
 set(Ceres_DIR "/root/SETUP/ceres210_install/lib/cmake/Ceres")
@@ -51,6 +60,8 @@ find_package(Ceres REQUIRED)
 # find_package(glog REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(TBB REQUIRED)
+
+# message(STATUS "2 Found Eigen3 version: ${EIGEN3_VERSION}")
 
 find_package(catkin REQUIRED COMPONENTS 
   roscpp
