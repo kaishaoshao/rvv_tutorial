@@ -49,7 +49,8 @@ fisheye: 1
 # cam_calib_path: /root/dev/stereo3_ros1_ws/install/share/stereo3/config/173_calib_vo.json
 # cam_calib_path: /root/dev/stereo3_ros1_ws/install/share/stereo3/config/baton_calib_stationary.json
 # cam_calib_path: /root/dev/stereo3_ros1_ws/install/share/stereo3/config/sports_field_calib_baton.json
-cam_calib_path: /root/lwx_dataset/compile_humble/root/lwx/rvv_tutorial/optical_flow_ws/src/optical_flow_test/config/sports_field_calib_baton_alpheus.json
+# cam_calib_path: /root/lwx_dataset/compile_humble/root/lwx/rvv_tutorial/optical_flow_ws/src/optical_flow_test/config/sports_field_calib_baton_alpheus.json
+cam_calib_path: /root/lwx_dataset/compile_humble/root/lwx/rvv_tutorial/optical_flow_ws/src/optical_flow_test/config/sports_field_calib_baton_S20_2024-09-14-15-44-58.json
 # cam_calib_path: /root/lwx_dataset/compile_humble/root/lwx/rvv_tutorial/optical_flow_ws/src/optical_flow_test/config/euroc_ds_calib.json
 
 dataset_path: ""

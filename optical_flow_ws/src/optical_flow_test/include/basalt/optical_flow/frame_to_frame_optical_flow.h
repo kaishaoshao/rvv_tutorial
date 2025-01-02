@@ -73,7 +73,9 @@ extern TYamlIO* g_yaml_ptr;
 
 #include <unordered_map>
 
-// #define _CV_OF_PYR_LK_
+#define _CV_OF_PYR_LK_
+
+#define _USE_S3_PYRAMID_IMG_
 
 using std::vector;
 using std::pair;
@@ -885,6 +887,111 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
   }
   // the end.
 
+  // 2025-1-2
+  void addPaddingToPyramid(const std::vector<cv::Mat>& pyramid, std::vector<cv::Mat>& paddedPyramid, 
+                         const cv::Size& winSize = cv::Size(21,21), int pyrBorder = cv::BORDER_REFLECT_101) {
+      int pyrSize = pyramid.size();
+      paddedPyramid.resize(pyrSize);;
+      
+      for (size_t level = 0; level < pyramid.size(); ++level) {
+
+          cv::Mat& temp = paddedPyramid.at(level);
+          const cv::Mat &img = pyramid.at(level);
+
+          if(!temp.empty())
+              temp.adjustROI(winSize.height, winSize.height, winSize.width, winSize.width);
+          if(temp.type() != img.type() || temp.cols != winSize.width*2 + img.cols || temp.rows != winSize.height * 2 + img.rows)
+              temp.create(img.rows + winSize.height*2, img.cols + winSize.width*2, img.type());
+
+          /*
+          if(pyrBorder == BORDER_TRANSPARENT)
+              img.copyTo(temp(Rect(winSize.width, winSize.height, img.cols, img.rows)));
+          else
+              copyMakeBorder(img, temp, winSize.height, winSize.height, winSize.width, winSize.width, pyrBorder);
+
+          */
+          int border = pyrBorder;
+          if(level != 0) border = pyrBorder|cv::BORDER_ISOLATED;
+          if(pyrBorder != cv::BORDER_TRANSPARENT)
+              // copyMakeBorder(img, temp, winSize.height, winSize.height, winSize.width, winSize.width, pyrBorder|BORDER_ISOLATED);
+              cv::copyMakeBorder(img, temp, winSize.height, winSize.height, winSize.width, winSize.width, border);
+
+          temp.adjustROI(-winSize.height, -winSize.height, -winSize.width, -winSize.width);
+
+      }
+  }
+
+  void addPadding2Img(const cv::Mat& img, cv::Mat& paddedImg, 
+                    const cv::Size& winSize = cv::Size(21,21), int pyrBorder = cv::BORDER_REFLECT_101) {  
+      //
+      cv::Mat& temp = paddedImg;
+
+      if(!temp.empty())
+          temp.adjustROI(winSize.height, winSize.height, winSize.width, winSize.width);
+      if(temp.type() != img.type() || temp.cols != winSize.width*2 + img.cols || temp.rows != winSize.height * 2 + img.rows)
+          temp.create(img.rows + winSize.height*2, img.cols + winSize.width*2, img.type());
+
+      int border = pyrBorder;
+      // if(level != 0) border = pyrBorder|BORDER_ISOLATED;
+      // cv::copyMakeBorder(img, temp, winSize.height, winSize.height, winSize.width, winSize.width, pyrBorder);
+      cv::copyMakeBorder(img, temp, winSize.height, winSize.height, winSize.width, winSize.width, border);
+      temp.adjustROI(-winSize.height, -winSize.height, -winSize.width, -winSize.width);
+  }
+  // the end.
+
+  // 2024-12-31.
+  cv::Mat stereo3Image2cvImage(const Image<const uint16_t>& img)
+  {
+    const uint16_t* data_in = nullptr;
+    uint8_t* data_out = nullptr;
+
+    // cv::Mat cv_image;
+    // cv_image = cv::Mat::zeros(img.h, img.w, CV_8UC1);  // CV_8UC3
+    cv::Mat cv_image(img.h, img.w, CV_8UC1);
+    data_out = cv_image.ptr();
+#if 0    
+    data_in = img.ptr;
+
+    size_t full_size = img.size();  // forw_img.cols * forw_img.rows;
+    for (size_t i = 0; i < full_size; i++) {
+      int val = data_in[i];
+      val = val >> 8;
+      data_out[i] = val;
+    }
+#else
+    size_t i = 0;
+    for (size_t r = 0; r < img.h; ++r) {
+      const uint16_t* row = img.RowPtr(r);
+
+      for(size_t c = 0; c < img.w; ++c) {
+        int val = row[c];
+        val = val >> 8;
+        data_out[i++] = val;
+      }
+
+    }
+#endif
+
+    return cv_image;
+  }
+
+  std::vector<cv::Mat> getPyramidImage(const basalt::ManagedImagePyr<uint16_t> & pyr)
+  {
+    std::vector<cv::Mat> pyramid_images;
+    for(int level = 0; level <= config.optical_flow_levels; level++)
+    {
+      const Image<const uint16_t> img = pyr.lvl(level);
+      pyramid_images.emplace_back(stereo3Image2cvImage(img));
+    }
+
+    std::vector<cv::Mat> paddedPyramid;
+    addPaddingToPyramid(pyramid_images, paddedPyramid);
+
+    // return std::move(pyramid_images);
+    return std::move(paddedPyramid);
+  }
+  // the end.
+
   // processFrame这里进行图像金字塔创建+跟踪+剔除特征点
   void processFrame(int64_t curr_t_ns, OpticalFlowInput::Ptr& new_img_vec) {
     
@@ -924,7 +1031,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       // step l : feature 像素位姿的观测容器transforms初始化
       transforms->observations.resize(calib.intrinsics.size()); // 设置观测容器大小，对于双目来说size就是2
       transforms->t_ns = t_ns; // 时间戳复制
-#if !defined(_CV_OF_PYR_LK_)
+// #if !defined(_CV_OF_PYR_LK_)
       // step 2 : 设置图像金字塔,注意为金字塔开辟的是一个数组
       pyramid.reset(new std::vector<basalt::ManagedImagePyr<uint16_t>>); // 初始化容器
       // step 2.1 金字塔的个数对应相机的个数
@@ -945,14 +1052,97 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                           }
                         });
 
+      // show pyramid image.
+      #if 0
+      {
+        // basalt::ManagedImagePyr<uint16_t>
+        // config.optical_flow_levels
+        
+        // 没有拷贝构造函数不能使用该赋值操作
+        // basalt::ManagedImagePyr<uint16_t> pyr = pyramid->at(0);
+        // 使用智能指针访问 pyramid 的元素
+        // basalt::ManagedImagePyr<uint16_t>& pyr = (*pyramid)[0];
+        // or use reference directly
+        basalt::ManagedImagePyr<uint16_t> &pyr = pyramid->at(0);
+
+        // const Image<const uint16_t> img = pyr.lvl(level);
+        const Image<const uint16_t> img = pyr.mipmap();
+
+        const uint16_t* data_in = nullptr;
+        uint8_t* data_out = nullptr;
+
+        // cv::Mat pyramid_image;
+        // pyramid_image = cv::Mat::zeros(img.h, img.w, CV_8UC1);  // CV_8UC3
+        cv::Mat pyramid_image(img.h, img.w, CV_8UC1);
+        data_in = img.ptr;
+        data_out = pyramid_image.ptr();
+
+        size_t full_size = img.size();  // forw_img.cols * forw_img.rows;
+        for (size_t i = 0; i < full_size; i++) {
+          int val = data_in[i];
+          val = val >> 8;
+          data_out[i] = val;
+        }
+
+        cv::imshow("pyramid image", pyramid_image);
+        cv::waitKey(0);
+      }
+      #endif
+
+      #if 0
+      {
+        //
+        basalt::ManagedImagePyr<uint16_t> &pyr = pyramid->at(0);
+        const Image<const uint16_t> img = pyr.lvl(config.optical_flow_levels);
+        // const Image<const uint16_t> img = pyr.lvl(0);
+
+        const uint16_t* data_in = nullptr;
+        uint8_t* data_out = nullptr;
+
+        // cv::Mat cv_image;
+        // cv_image = cv::Mat::zeros(img.h, img.w, CV_8UC1);  // CV_8UC3
+        cv::Mat cv_image(img.h, img.w, CV_8UC1);
+        data_out = cv_image.ptr();
+#if 0        
+        data_in = img.ptr;
+        size_t full_size = img.size();  // forw_img.cols * forw_img.rows;
+        for (size_t i = 0; i < full_size; i++) {
+          int val = data_in[i];
+          val = val >> 8;
+          data_out[i] = val;
+        }
+#else
+        size_t i = 0;
+        for (size_t r = 0; r < img.h; ++r) {
+          const uint16_t* row = img.RowPtr(r);
+
+          for(size_t c = 0; c < img.w; ++c) {
+            int val = row[c];
+            val = val >> 8;
+            data_out[i++] = val;
+          }
+        }
+#endif
+
+        cv::imshow("pyramid image", cv_image);
+        cv::waitKey(0);
+      }
+      #endif
+      // the end.
+
+#if !defined(_CV_OF_PYR_LK_)
       // step3: 将图像的指针放入到transforms中，用于可视化
       transforms->input_images = new_img_vec;
 
       // step4: 添加特征点（因为是第一帧，故而直接提取新的特征点）
       addPoints();
 #else
-      transforms->input_images = new_img_vec;     
+      transforms->input_images = new_img_vec; 
+      #if !defined(_USE_S3_PYRAMID_IMG_)
       addPoints2(forw_img[0], forw_img[1]);
+      #else
+      addPoints_pyr(getPyramidImage(pyramid->at(0)), getPyramidImage(pyramid->at(1)));
+      #endif
 #endif      
       // step5: 使用对极几何剔除外点
       filterPoints();
@@ -984,7 +1174,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
       // step 1: 更新时间
       t_ns = curr_t_ns; // 拷贝时间戳
-#if !defined(_CV_OF_PYR_LK_)
+// #if !defined(_CV_OF_PYR_LK_)
       // step 2.1: 更新last image的金子塔
       old_pyramid = pyramid; // 保存上一图像的金字塔
 
@@ -999,7 +1189,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                                 config.optical_flow_levels);
                           }
                         });
-
+#if !defined(_CV_OF_PYR_LK_)
       // step3: 追踪特征点
       OpticalFlowResult::Ptr new_transforms; // 新的返回参数
       new_transforms.reset(new OpticalFlowResult);
@@ -1061,7 +1251,14 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
         // prev cam0 to current cam0  &  prev cam1 to current cam1
         status.clear();
+
+        #if !defined(_USE_S3_PYRAMID_IMG_)
         cv::calcOpticalFlowPyrLK(cur_img[i], forw_img[i], cur_pts[i], forw_pts[i], status, err, cv::Size(21, 21), 3);
+        #else
+        //getPyramidImage(pyramid->at(0)), getPyramidImage(pyramid->at(1))
+        cv::calcOpticalFlowPyrLK(getPyramidImage(old_pyramid->at(i)), getPyramidImage(pyramid->at(i)), cur_pts[i], forw_pts[i], status, err, cv::Size(21, 21), 3);
+        #endif
+
         // if(i == 0) std::cout << "cur_pts[0]=" << cur_pts[i].size() << " forw_pts[0]=" << forw_pts[i].size() << std::endl;
 
         int size = int(forw_pts[i].size());
@@ -1102,8 +1299,12 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       // step 5: add feature 增加点
 #if !defined(_CV_OF_PYR_LK_)
       addPoints(); // 追踪之后，继续提取新的点（对于非第一帧而言，先是追踪特征点，然后再提取新的点）
-#else     
+#else
+      #if !defined(_USE_S3_PYRAMID_IMG_)
       addPoints2(forw_img[0], forw_img[1]);
+      #else
+      addPoints_pyr(getPyramidImage(pyramid->at(0)), getPyramidImage(pyramid->at(1)));
+      #endif
 #endif
       // step 6: 如果是双目相机，使用对极几何剔除外点
       filterPoints(); // 使用双目E剔除点
@@ -1199,6 +1400,54 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
 
       }
+
+      // 2025-1-2
+      if(1) // show cam0 cam1 tracked image.
+      {
+        cv::Mat result_img;
+        cv::hconcat(forw_img[0], forw_img[1], result_img);
+        cv::cvtColor(result_img, result_img, cv::COLOR_GRAY2BGR);
+        for (const auto& kv_obs : transforms->observations[0]) {
+          Eigen::Matrix<Scalar, 2, 1> pos = kv_obs.second.first.translation().cast<Scalar>();
+          cv::Point2f p0(pos.x(), pos[1]);
+          // cv::circle(result_img, cv::Point2f(p.x(), p[1]), 2, cv::Scalar(255 * (1 - len), 0, 255 * len), 2);
+          cv::circle(result_img, p0, 2, cv::Scalar(255, 0, 0), 2);
+
+          auto it = transforms->observations[1].find(kv_obs.first);
+          // if(transforms->observations[1].count(kv_obs.first))
+          if(it != transforms->observations[1].end())
+          {
+            Eigen::Matrix<Scalar, 2, 1> pos = it->second.first.translation().cast<Scalar>();
+            cv::Point2f p1(pos.x() + COL, pos[1]);
+            cv::circle(result_img, p1, 2, cv::Scalar(0, 0, 255), 2);
+            cv::line(result_img, p0, p1, cv::Scalar(0, 255, 0), 1);
+          }
+        }
+
+        std::stringstream ss;
+        ss << "cam0: " << transforms->observations[0].size() << "  cam1: " << transforms->observations[1].size() << "";
+        std::string strText = ss.str();
+        // show text
+        int font_face = cv::FONT_HERSHEY_SIMPLEX;  // cv::FONT_HERSHEY_COMPLEX;
+        double font_scale = 0.5;                   // 1;//2;//1;
+        int thickness = 1;  // 2; // 字体笔画的粗细程度，有默认值1
+        int baseline;
+        // 获取文本框的长宽
+        // cv::Size text_size = cv::getTextSize(text, font_face, font_scale,
+        // thickness, &baseline);
+        cv::Size text_size =
+            cv::getTextSize(strText, font_face, font_scale, thickness, &baseline);
+
+        // 将文本框右上角绘制
+        cv::Point origin;  // 计算文字左下角的位置
+        origin.x = result_img.cols - text_size.width;
+        origin.y = text_size.height;
+
+        cv::putText(result_img, strText, origin, font_face, font_scale, cv::Scalar(0, 255, 255), thickness, 8, false);  
+        cv::imshow("cam0 - cam1 tracked image ", result_img);
+        cv::waitKey(3);
+      }
+      // the end.
       
 
       return ;
@@ -1467,6 +1716,110 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     // std::cout << "num_it = " << iteration << std::endl;
 
     return patch_valid;
+  }
+
+  void addPoints_pyr(const std::vector<cv::Mat> &pyr0, const std::vector<cv::Mat> &pyr1) {
+    // test
+    #if 0
+    {
+      for(int i = 0; i < pyr0.size(); i++)
+      {
+        cv::imshow("pyramid image", pyr0.at(i));
+        cv::waitKey(0);
+      }
+
+      for(int i = 0; i < pyr1.size(); i++)
+      {
+        std::cout << "Image channels: " << pyr1[i].channels() << std::endl;
+        std::cout << "Image size: " << pyr1[i].size() << std::endl;
+        std::cout << "Image isContinuous: " << pyr1[i].isContinuous() << std::endl;
+        std::cout << "Image step: " << pyr1[i].step[0] << std::endl;
+        // cv::imshow("pyramid image", pyr1.at(i));
+        // cv::waitKey(0);
+      }
+      
+    }
+    #endif
+
+    // step 1 在当前帧第0层检测特征(划分网格，在网格中只保存响应比较好的和以前追踪的)
+    Eigen::aligned_vector<Eigen::Vector2d> pts0;
+
+    // 将以前追踪到的点放入到pts0,进行临时保存
+    // kv为Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>类型的容器中的一个元素（键值对）
+    for (const auto& kv : transforms->observations.at(0)) { // at(0)表示取左目的观测数据
+      pts0.emplace_back(kv.second.first.translation().cast<double>()); // 取2d图像的平移部分，即二维像素坐标
+    }
+
+    KeypointsData kd; // 用来存储新检测到的特征点
+    // detectKeypoints2(pyramid->at(0).lvl(0), kd, grid_size_, 1, pts0);
+    detectKeypoints3(pyr0.at(0), kd, grid_size_, 1, pts0);
+
+    // Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>> new_poses0,
+        // new_poses1;
+
+    vector<cv::Point2f> cam0_pts, cam1_pts;
+    vector<int> ids;    
+
+    // step 2 遍历特征点, 每个特征点利用特征点 初始化光流金字塔的初值
+    // 添加新的特征点的观测值
+    for (size_t i = 0; i < kd.corners.size(); i++) {
+      Eigen::AffineCompact2f transform;
+      transform.setIdentity(); //旋转 设置为单位阵
+      transform.translation() = kd.corners[i].cast<Scalar>(); // 角点坐标，保存到transform的平移部分
+
+      cam0_pts.emplace_back(cv::Point2f(kd.corners[i].x(), kd.corners[i].y()));
+
+      // 特征点转换成输出结果的数据类型map
+      // transforms->observations.at(0)[last_keypoint_id] = transform; // 键值对来存储特征点，类型为Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>
+      transforms->observations.at(0)[last_keypoint_id] = std::make_pair(transform, 0);
+
+      // new_poses0[last_keypoint_id] = std::make_pair(transform, 0);
+
+      ids.emplace_back(last_keypoint_id);
+
+      last_keypoint_id++; // last keypoint id 是一个类成员变量
+    }
+
+    // step 3 如果是有双目的话，使用左目新提的点，进行左右目追踪。右目保留和左目追踪上的特征点
+    //如果是双目相机,我们使用光流追踪算法，即计算Left image 提取的特征点在right image图像中的位置
+    if (calib.intrinsics.size() > 1 && cam0_pts.size()) {//相机内参是否大于1
+      /*
+      // 使用左目提取的特征点使用光流得到右目上特征点的位置
+      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1);
+      // 保存结果，因为是右目的点，因此保存到下标1中
+      for (const auto& kv : new_poses1) {
+        transforms->observations.at(1).emplace(kv);
+      }*/
+
+      vector<uchar> status;
+      vector<float> err;
+      // std::cout << "cam0_pts.size=" << cam0_pts.size() << std::endl;
+      // cv::calcOpticalFlowPyrLK(img0, img1, cam0_pts, cam1_pts, status, err, cv::Size(21, 21), 3);
+      cv::calcOpticalFlowPyrLK(pyr0, pyr1, cam0_pts, cam1_pts, status, err, cv::Size(21, 21), 3);
+
+      int size = int(cam1_pts.size());
+        for (int j = 0; j < size; j++)
+            // 通过图像边界剔除outlier
+            if (status[j] && !inBorder(cam1_pts[j]))    // 追踪状态好检查在不在图像范围
+                status[j] = 0;
+
+        // reduceVector(cam0_pts, status);
+        reduceVector(cam1_pts, status);
+        reduceVector(ids, status);
+        // reduceVector(track_cnt[i], status);
+
+        // rejectWithF(cam0_pts, cam1_pts, kpt_ids[i], track_cnt[i], ds_cam[i], FOCAL_LENGTH[i]);
+
+        for (size_t i = 0; i < cam1_pts.size(); i++) {
+
+          Eigen::AffineCompact2f transform;
+          transform.setIdentity(); //旋转 设置为单位阵
+          transform.translation() = Eigen::Vector2d(cam1_pts[i].x, cam1_pts[i].y).cast<Scalar>();
+
+          transforms->observations.at(1).emplace(ids[i], std::make_pair(transform, 1));
+        }
+
+    }
   }
 
   void addPoints2(const cv::Mat &img0, const cv::Mat &img1) {
