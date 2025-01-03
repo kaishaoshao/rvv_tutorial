@@ -149,6 +149,24 @@ int main(int argc, char* argv[])
         std::vector<cv::Point2f> prevPts, nextPts;
         cv::goodFeaturesToTrack(prevImg, prevPts, 100, 0.3, 7);
 
+        /*
+        prevPts.size=16
+        prevPtsMat.size=[16 x 1] # w x h i.e. col x row
+        prevPtsMat.channels=2
+        prevPtsMat.rows=1 prevPtsMat.cols=16
+        Image channels: 1
+        Image size: [640 x 480]
+        Image isContinuous: 0
+        Image step: 682
+        Image depth: 0
+         */
+        std::cout << "prevPts.size=" << prevPts.size() << std::endl;
+        InputArray _prevPts = prevPts;
+        Mat prevPtsMat = _prevPts.getMat();
+        std::cout << "prevPtsMat.size=" << prevPtsMat.size() << std::endl;
+        std::cout << "prevPtsMat.channels=" << prevPtsMat.channels() << std::endl;
+        std::cout << "prevPtsMat.rows=" << prevPtsMat.rows << " prevPtsMat.cols=" << prevPtsMat.cols << std::endl;
+
         Mat img = cv::imread("pyramid_level_1.png", cv::IMREAD_GRAYSCALE);
         pyramid.emplace_back(img);
 
