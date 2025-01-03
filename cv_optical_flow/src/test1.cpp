@@ -169,6 +169,9 @@ int main(int argc, char* argv[])
         std::cout << "Image size: " << paddedPyramid[i].size() << std::endl;
         std::cout << "Image isContinuous: " << paddedPyramid[i].isContinuous() << std::endl;
         std::cout << "Image step: " << paddedPyramid[i].step[0] << std::endl;
+        // 如果depth 返回0, 即opencv的CV_8U,表示每个元素的位深是8-bit无符号的
+        std::cout << "Image depth: " << paddedPyramid[i].depth() << std::endl;
+        
 
         std::vector<uchar> status;
         std::vector<float> err;
