@@ -73,7 +73,7 @@ extern TYamlIO* g_yaml_ptr;
 
 #include <unordered_map>
 
-#define _CV_OF_PYR_LK_
+// #define _CV_OF_PYR_LK_
 
 #define _USE_S3_PYRAMID_IMG_
 
@@ -98,6 +98,7 @@ template <typename Scalar, template <typename> typename Pattern>
 class FrameToFrameOpticalFlow : public OpticalFlowBase {
  public:
   typedef OpticalFlowPatch<Scalar, Pattern<Scalar>> PatchT;
+  typedef OpticalFlowPatch<Scalar, Pattern441<Scalar>> PatchT2;
 
   typedef Eigen::Matrix<Scalar, 2, 1> Vector2;
   typedef Eigen::Matrix<Scalar, 2, 2> Matrix2;
@@ -1204,9 +1205,15 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
           back_track_failed_cnt = 0;
           gt_max_recovered_dis_cnt = 0;
         }
+        #if 1
         trackPoints(old_pyramid->at(i), pyramid->at(i),
                     transforms->observations[i],
                     new_transforms->observations[i]);
+        #else
+        trackPoints3(old_pyramid->at(i), pyramid->at(i),
+                    transforms->observations[i],
+                    new_transforms->observations[i]);
+        #endif
 
         if(i == 0)
         {
@@ -1465,6 +1472,195 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     frame_counter++; // 图像的数目累加
   }
 
+  // 2025-1-7
+  void trackPoints2(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
+                    const basalt::ManagedImagePyr<uint16_t>& pyr_2,
+                    const Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>& transform_map_1,
+                    Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>& transform_map_2)
+  {
+  #if 1
+    #if 0
+    vector<cv::Mat> prevPyr = getPyramidImage(pyr_1);
+    vector<cv::Mat> nextPyr = getPyramidImage(pyr_2);
+    const cv::Size winSize(21, 21);
+
+    cv::Mat derivIBuf;
+    derivIBuf.create(prevPyr[0].rows + winSize.height*2, prevPyr[0].cols + winSize.width*2, CV_MAKETYPE(derivDepth, prevPyr[0].channels() * 2));
+    //
+    for (int level = config.optical_flow_levels; level >= 0; level--)
+    {
+      // 计算图像梯度
+      cv::Mat derivI;
+      cv::Size imgSize = prevPyr[level * lvlStep1].size();
+      cv::Mat _derivI( imgSize.height + winSize.height*2,
+          imgSize.width + winSize.width*2, derivIBuf.type(), derivIBuf.ptr() );
+      derivI = _derivI(Rect(winSize.width, winSize.height, imgSize.width, imgSize.height));
+      cv::calcScharrDeriv(prevPyr[level * lvlStep1], derivI); // 计算图像的Scharr导数
+      cv::copyMakeBorder(derivI, _derivI, winSize.height, winSize.height, winSize.width, winSize.width, BORDER_CONSTANT|BORDER_ISOLATED); // 扩展边界
+      
+      //
+      // 使用并行计算加速光流追踪
+      /*
+      typedef cv::detail::LKTrackerInvoker LKTrackerInvoker;
+      parallel_for_(Range(0, npoints), LKTrackerInvoker(prevPyr[level * lvlStep1], derivI,
+                                                        nextPyr[level * lvlStep2], prevPts, nextPts,
+                                                        status, err,
+                                                        winSize, criteria, level, maxLevel,
+                                                        flags, (float)minEigThreshold));*/
+    }
+    #endif
+    //
+  #else  
+    size_t num_points = transform_map_1.size();
+    std::vector<std::pair<KeypointId, TrackCnt>> ids;
+    Eigen::aligned_vector<Eigen::AffineCompact2f> init_vec;
+    ids.reserve(num_points);
+    init_vec.reserve(num_points);
+    for (const auto& kv : transform_map_1) {
+      ids.push_back(std::make_pair(kv.first, kv.second.second));
+      init_vec.push_back(kv.second.first);
+    }
+    tbb::concurrent_unordered_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>,
+                                  std::hash<KeypointId>> result;
+    //
+    auto compute_func = [&](const tbb::blocked_range<size_t>& range) {
+      //
+      for (size_t r = range.begin(); r != range.end(); ++r) { // r表示点在vector容器中的序号
+        const std::pair<KeypointId, TrackCnt> id = ids[r]; // 得到点的id
+        const Eigen::AffineCompact2f& transform_1 = init_vec[r];
+        Eigen::AffineCompact2f transform_2 = transform_1;
+        // trackpoint2()
+      }
+    };
+
+    tbb::blocked_range<size_t> range(0, num_points);
+    tbb::parallel_for(range, compute_func);
+
+    transform_map_2.clear();
+    transform_map_2.insert(result.begin(), result.end());
+  #endif  
+  }
+
+  #if 0
+  void trackPoints3(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
+                    const basalt::ManagedImagePyr<uint16_t>& pyr_2,
+                    const Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>& transform_map_1,
+                    Eigen::aligned_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>>& transform_map_2)
+  {
+    size_t num_points = transform_map_1.size();
+    std::vector<std::pair<KeypointId, TrackCnt>> ids;
+    Eigen::aligned_vector<Eigen::AffineCompact2f> init_vec;
+    ids.reserve(num_points);
+    init_vec.reserve(num_points);
+    for (const auto& kv : transform_map_1) {
+      ids.push_back(std::make_pair(kv.first, kv.second.second));
+      init_vec.push_back(kv.second.first);
+    }
+    tbb::concurrent_unordered_map<KeypointId, std::pair<Eigen::AffineCompact2f, TrackCnt>,
+                                  std::hash<KeypointId>> result;
+    //
+    auto compute_func = [&](const tbb::blocked_range<size_t>& range) {
+      //
+      for (size_t r = range.begin(); r != range.end(); ++r) { // r表示点在vector容器中的序号
+        const std::pair<KeypointId, TrackCnt> id = ids[r]; // 得到点的id
+
+        const Eigen::AffineCompact2f& transform_1 = init_vec[r];
+        Eigen::AffineCompact2f transform_2 = transform_1;
+
+        bool valid = trackPoint3(pyr_1, pyr_2, transform_1, transform_2);
+        if(valid)
+        {
+          result[id.first] = std::make_pair(transform_2, id.second + 1);
+        }
+      }
+    };
+
+    tbb::blocked_range<size_t> range(0, num_points);
+    tbb::parallel_for(range, compute_func);
+
+    transform_map_2.clear();
+    transform_map_2.insert(result.begin(), result.end());
+  }
+
+  inline bool trackPoint3(const basalt::ManagedImagePyr<uint16_t>& old_pyr,
+                         const basalt::ManagedImagePyr<uint16_t>& pyr,
+                         const Eigen::AffineCompact2f& old_transform,
+                         Eigen::AffineCompact2f& transform) const {
+    //
+    bool patch_valid = true;
+    transform.linear().setIdentity();
+    //
+    for (int level = config.optical_flow_levels; level >= 0 && patch_valid; level--)
+    {
+      //
+      const Scalar scale = 1 << level;
+      transform.translation() /= scale;
+
+      PatchT2 p(old_pyr.lvl(level), old_transform.translation() / scale);
+
+      patch_valid &= p.valid;
+      if (patch_valid) {
+        // Perform tracking on current level
+        patch_valid &= trackPointAtLevel3(pyr.lvl(level), p, transform);
+      }
+
+      transform.translation() *= scale;
+    }
+
+    transform.linear() = old_transform.linear() * transform.linear();
+
+    return patch_valid;
+  }
+
+  inline bool trackPointAtLevel3(const Image<const uint16_t>& img_2,
+                                const PatchT2& dp,
+                                Eigen::AffineCompact2f& transform) const {
+    bool patch_valid = true;
+
+    // 指定循环次数，且patch合法
+    // int iteration = 0; // added this line for test 2023-12-15.
+    for (int iteration = 0;
+        //  patch_valid && iteration < config.optical_flow_max_iterations;
+         patch_valid && iteration < max_iterations_;
+         iteration++) {
+      typename PatchT2::VectorP res;
+
+      // patch旋转平移到当前帧
+      typename PatchT2::Matrix2P transformed_pat =
+          transform.linear().matrix() * PatchT::pattern2;
+      transformed_pat.colwise() += transform.translation();
+
+      // 计算参考帧和当前帧patern对应的像素值差
+      patch_valid &= dp.residual(img_2, transformed_pat, res);
+
+      if (patch_valid) {
+        // 计算增量，扰动更新
+        const Vector3 inc = -dp.H_se2_inv_J_se2_T * res; // 求增量Δx = - H^-1 * J^T * r
+
+        // avoid NaN in increment (leads to SE2::exp crashing)
+        patch_valid &= inc.array().isFinite().all();
+
+        // avoid very large increment
+        patch_valid &= inc.template lpNorm<Eigen::Infinity>() < 1e6;
+
+        if (patch_valid) {
+          transform *= SE2::exp(inc).matrix(); // 更新状态量
+
+          const int filter_margin = 2;
+
+          // 判断更新后的像素坐标是否在图像img_2范围内
+          patch_valid &= img_2.InBounds(transform.translation(), filter_margin);
+        }
+      }
+    }
+
+    // std::cout << "num_it = " << iteration << std::endl;
+
+    return patch_valid;
+  }
+  // the end.
+  #endif
+
   // trackPoints函数是用来追踪两幅图像的特征点的，输入是 金字塔1, 金字塔2, 1中的点, 输出的是2追踪1的点（即1中的点，被经过追踪之后，得到在图像2中的像素坐标）
   // 这里的1指的是上一帧，那么2就是当前帧；或者1指的是当前帧的左目， 那么2指的是当前帧的右目
   void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
@@ -1528,6 +1724,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
           #endif
 
           if (valid) {
+            // 计算反向光流恢复的前一帧的坐标，跟前一帧已知的坐标之间的欧氏距离的平方（点坐标求差之后再求二范数的平方）
             Scalar dist2 = (transform_1.translation() -
                             transform_1_recovered.translation())
                                .squaredNorm();
@@ -1955,7 +2152,11 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     //如果是双目相机,我们使用光流追踪算法，即计算Left image 提取的特征点在right image图像中的位置
     if (calib.intrinsics.size() > 1) {//相机内参是否大于1
       // 使用左目提取的特征点使用光流得到右目上特征点的位置
+      #if 1
       trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1);
+      #else
+      trackPoints3(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1);
+      #endif
       // 保存结果，因为是右目的点，因此保存到下标1中
       for (const auto& kv : new_poses1) {
         transforms->observations.at(1).emplace(kv);

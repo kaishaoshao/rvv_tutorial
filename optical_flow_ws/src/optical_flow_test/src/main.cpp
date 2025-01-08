@@ -31,9 +31,62 @@ void load_data(const std::string& calib_path);
 // Feed functions
 void feedImage(basalt::OpticalFlowInput::Ptr data);
 
+#include <opencv2/opencv.hpp>
+typedef Eigen::Matrix<float, 2, 441> Mat2x441; // wxliu
+Mat2x441 pattern_win;
+
 int main(int argc, char* argv[])
 {
     std::cout << "\033[0;31m main() \033[0m" << std::endl;
+
+    if(0)
+    {
+      int i = 0;
+      for(i = 0; i < 441; i++)
+      {
+        if(i % 21 == 0) std::cout << std::endl;
+        std::cout << std::setfill('0') << std::setw(3) << i << "  ";// << std::endl;
+      }
+
+      return 0;
+    }
+
+    if(0)
+    {
+      cv::Size winSize(21, 21);
+      cv::Point2f halfWin((winSize.width-1)*0.5f, (winSize.height-1)*0.5f);
+      // cv::Point2f prevPt(pos.x(), pos[1]);
+      // prevPt -= halfWin;
+      int i = 0;
+      float *pOffset = pattern_win.data();
+      int x, y;
+      for( y = 0; y < winSize.height; y++ )
+      {
+        x = 0;
+        for( ; x < winSize.width; x++)
+        {
+          //
+          // Eigen::Matrix<float, 2, 1> &col = pattern_win.col(i++);
+          // col[0] = x - halfWin.x;
+          // col[1] = y - halfWin.y;
+          pOffset[i++] = x - halfWin.x;
+          pOffset[i++] = y - halfWin.y;
+        }
+      }
+
+      // std::cout << "pattern_win=\n" << pattern_win << std::endl;
+      for(int i = 0; i < 441; i++)
+      {
+        // if( i > 0 && i % 10 == 0) std::cout << std::endl;
+        if(i % 21 == 0) std::cout << std::endl;
+        // std::cout << pattern_win.col(i).transpose();// << std::endl;
+        auto offset = pattern_win.col(i);
+        std::cout << "{" << offset[0] << ", " << offset(1) << "}, ";
+        
+      }
+
+      return 0;
+    }
     
     // ros
     ros::init(argc, argv, "optical_flow_node");  // node name
@@ -85,7 +138,11 @@ int main(int argc, char* argv[])
 
     load_data(yaml.cam_calib_path);
 
+    #if 0
     opt_flow_ptr.reset(new FrameToFrameOpticalFlow<float, Pattern51>(vio_config, calib));
+    #else
+    opt_flow_ptr.reset(new FrameToFrameOpticalFlow<float, Pattern441>(vio_config, calib));
+    #endif
     
     // wx::CRos1IO node {ros::NodeHandle{"~"}, yaml };
     wx::CRos1IO node{n, yaml};

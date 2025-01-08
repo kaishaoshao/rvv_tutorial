@@ -94,11 +94,34 @@ struct OpticalFlowPatch {
   typedef Eigen::Matrix<Scalar, PATTERN_SIZE, 4> MatrixP4;
   typedef Eigen::Matrix<int, 2, PATTERN_SIZE> Matrix2Pi;
 
+  // typedef Eigen::Matrix<Scalar, 2, 441> Matrix2x441; // wxliu
+  // Matrix2x441 pattern_win;
+
   static const Matrix2P pattern2;
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  OpticalFlowPatch() = default;
+  OpticalFlowPatch() = default; // comment by wxliu on 2025-1-7
+  /*OpticalFlowPatch()
+  {
+    cv::Size winSize(21, 21);
+    cv::Point2f halfWin((winSize.width-1)*0.5f, (winSize.height-1)*0.5f);
+    // cv::Point2f prevPt(pos.x(), pos[1]);
+    // prevPt -= halfWin;
+    int i = 0;
+    int x, y;
+    for( y = 0; y < winSize.height; y++ )
+    {
+      x = 0;
+      for( ; x < winSize.width; x++)
+      {
+        //
+        Eigen::Matrix<Scalar, 2, 1> &col = pattern_win.col(i++);
+        col[0] = x - halfWin.x;
+        col[1] = y - halfWin.y;
+      }
+    }
+  }*/
 
   // @img: 金字塔指定层的图像
   // @pos: 对应层的坐标
@@ -140,6 +163,76 @@ struct OpticalFlowPatch {
   // 理论部分: 对应单个像素的光流 ∂r/∂se2 = ∂I/∂pix * ∂pix/∂se2
   // ∂I/∂pix 表示图像梯度，因为图像是个离散的表达，因此这部分其实是采用f'(x) = f(x+Δx)−f(x) / Δx   f'(x) = \frac{f(x+\Delta x) - f(x)}{\Delta x}
   // 进行计算的，简单说，就是相邻像素差就是图像梯度了，但是为了保证精度，basalt做了线性插值。
+
+  // 2025-1-7
+  template <typename ImgT>
+  static void setDataJacSe2_win(const ImgT &img, const Vector2 &pos, Scalar &mean,
+                            VectorP &data, MatrixP3 &J_se2) {
+    int num_valid_points = 0;
+    Scalar sum = 0;
+    Vector3 grad_sum_se2(0, 0, 0);
+
+    Eigen::Matrix<Scalar, 2, 3> Jw_se2; // 2 * 3的矩阵, 这个属于几何雅可比
+    Jw_se2.template topLeftCorner<2, 2>().setIdentity(); // 左上角2 * 2设为单位阵，即前面两列由单位阵占据
+
+    /*cv::Size winSize(21, 21);
+    cv::Point2f halfWin((winSize.width-1)*0.5f, (winSize.height-1)*0.5f);
+    cv::Point2f prevPt(pos.x(), pos[1]);
+    prevPt -= halfWin;
+    int x, y;
+    for( y = 0; y < winSize.height; y++ )
+    {
+      x = 0;
+      for( ; x < winSize.width; x++)
+      {
+        //
+      }
+    }*/
+
+    // 对于每个pattern内部的点进行计算
+    for (int i = 0; i < PATTERN_SIZE; i++) { // PATTERN_SIZE=52的时候，表示patch里面有52个点，pattern2里面是坐标的偏移量
+      Vector2 p = pos + pattern2.col(i); // 位于图像的位置，点的位置加上pattern里面的偏移量，得到在patch里面的新的位姿
+
+      // Fill jacobians with respect to SE2 warp 对Jw_se2的第2列（列下标从0开始的,也即最后一列）赋值 //- 下面两行完全是为了构建几何雅可比。
+      Jw_se2(0, 2) = -pattern2(1, i); // 取pattern2的第1行，第i列。 对于Pattern51来说，pattern2表示的是2*52的矩阵
+      Jw_se2(1, 2) = pattern2(0, i); // 取pattern2的第0行，第i列
+
+      if (img.InBounds(p, 2)) { // 判断加了偏移量的点p是否在图像内，border=2
+        // valGrad[0]表示图像强度，valGrad[1]表示x方向梯度，valGrad[0]表示y方向梯度
+        Vector3 valGrad = img.template interpGrad<Scalar>(p); // interp是interpolation的缩写，表示利用双线性插值计算图像灰度和图像梯度 ( x方向梯度, y方向梯度 )
+        data[i] = valGrad[0]; // 赋值图像灰度值
+        sum += valGrad[0]; // 统计总图像强度
+        // J_se2在Pattern51的情况下是52*3，每一行是1*3. //?具体含义有待补充：其实这一部分是，梯度*几何雅可比
+        J_se2.row(i) = valGrad.template tail<2>().transpose() * Jw_se2; // 链式法则: 取valGrad的后2位元素，即图像梯度，列向量转置后，变成1*2，再乘以2*3 
+        grad_sum_se2 += J_se2.row(i); // 所有行的梯度相加
+        num_valid_points++;
+      } else {
+        data[i] = -1;
+      }
+    }
+
+
+
+    mean = sum / num_valid_points; // 总灰度除以有效点数，得到平均亮度值，可以消除曝光时间引起的图像光度尺度变化，但无法消除光度的偏移变化
+
+    const Scalar mean_inv = num_valid_points / sum; // 平均亮度的逆
+
+    for (int i = 0; i < PATTERN_SIZE; i++) {
+      if (data[i] >= 0) { // 如果patch里面序号i对应的点的图像强度大于等于0，
+        J_se2.row(i) -= grad_sum_se2.transpose() * data[i] / sum; //? //TODO: -= 和 /  谁的优先级更高
+        data[i] *= mean_inv;
+      } else { // 否则无效的图像强度，该行直接置为0
+        J_se2.row(i).setZero();
+      }
+    }
+    J_se2 *= mean_inv; // 至此，完成了梯度雅可比和几何雅可比的链式法则求偏导的整个过程。
+
+    #if 0
+    std::cout << std::setprecision(3) << std::fixed << "3 J_se2.trace=" << J_se2.trace() <<"  J_se2.diagonal=" << J_se2.diagonal().transpose() << std::endl;
+    #endif
+
+  }
+  // the end.
 
 #if !defined(_USE_RISCV_V)
   template <typename ImgT>
@@ -2130,6 +2223,7 @@ clock_t OpticalFlowPatch<float, Pattern51<float>>::clock_sum = 0; // 在类外�
 template<> clock_t OpticalFlowPatch<float, Pattern52<float>>::clock_sum = 0;
 template<> clock_t OpticalFlowPatch<float, Pattern50<float>>::clock_sum = 0;
 template<> clock_t OpticalFlowPatch<float, Pattern24<float>>::clock_sum = 0;
+template<> clock_t OpticalFlowPatch<float, Pattern441<float>>::clock_sum = 0;
 
 template<>
 clock_t OpticalFlowPatch<float, Pattern51<float>>::residual_clock_sum = 0; // 在类外定义并初始化
@@ -2137,6 +2231,7 @@ clock_t OpticalFlowPatch<float, Pattern51<float>>::residual_clock_sum = 0; // �
 template<> clock_t OpticalFlowPatch<float, Pattern52<float>>::residual_clock_sum = 0;
 template<> clock_t OpticalFlowPatch<float, Pattern50<float>>::residual_clock_sum = 0;
 template<> clock_t OpticalFlowPatch<float, Pattern24<float>>::residual_clock_sum = 0;
+template<> clock_t OpticalFlowPatch<float, Pattern441<float>>::residual_clock_sum = 0;
 
 template <typename Scalar, typename Pattern>
 const typename OpticalFlowPatch<Scalar, Pattern>::Matrix2P
