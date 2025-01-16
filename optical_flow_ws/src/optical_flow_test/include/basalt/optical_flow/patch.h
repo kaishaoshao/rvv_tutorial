@@ -72,6 +72,25 @@ void *memcpy_vec(void *destination, const void *source, size_t n) {
 
 #endif
 
+// wxliu on 2025-1-14
+#define FORWARD_ADDITIVE_APPROACH
+
+#ifdef FORWARD_ADDITIVE_APPROACH
+#ifndef FLT_EPSILON
+#define FLT_EPSILON 1.19209290e-7f
+#endif
+#if defined __arm__ && !CV_NEON
+typedef int64 acctype;
+typedef int itemtype;
+#else
+typedef float acctype;
+typedef float itemtype;
+#endif
+
+#endif
+// the end.
+
+
 namespace basalt {
 
 template <typename Scalar, typename Pattern>
@@ -126,7 +145,11 @@ struct OpticalFlowPatch {
   // @img: 金字塔指定层的图像
   // @pos: 对应层的坐标
   OpticalFlowPatch(const Image<const uint16_t> &img, const Vector2 &pos) {
+#if !defined(FORWARD_ADDITIVE_APPROACH)    
     setFromImage(img, pos);
+#else    
+    calcHess(img, pos);
+#endif    
   }
 
   template <typename ImgT>
@@ -163,6 +186,84 @@ struct OpticalFlowPatch {
   // 理论部分: 对应单个像素的光流 ∂r/∂se2 = ∂I/∂pix * ∂pix/∂se2
   // ∂I/∂pix 表示图像梯度，因为图像是个离散的表达，因此这部分其实是采用f'(x) = f(x+Δx)−f(x) / Δx   f'(x) = \frac{f(x+\Delta x) - f(x)}{\Delta x}
   // 进行计算的，简单说，就是相邻像素差就是图像梯度了，但是为了保证精度，basalt做了线性插值。
+
+  // 2025-1-14
+  template <typename ImgT>
+  inline void calcHess(const ImgT &img, const Vector2 &pos) {
+    Scalar iA11 = 0, iA12 = 0, iA22 = 0;
+
+    for (int i = 0; i < PATTERN_SIZE; i++) {
+      Vector2 p = pos + pattern2.col(i); // 位于图像的位置，点的位置加上pattern里面的偏移量，得到在patch里面的新的位姿
+
+      if (img.InBounds(p, 2)) { // 判断加了偏移量的点p是否在图像内，border=2
+        // valGrad[0]表示图像强度，valGrad[1]表示x方向梯度，valGrad[0]表示y方向梯度
+        Vector3 valGrad = img.template interpGrad<Scalar>(p); // interp是interpolation的缩写，表示利用双线性插值计算图像灰度和图像梯度 ( x方向梯度, y方向梯度 )
+        IWinBuf[i] = valGrad[0]; // 赋值图像灰度值
+        dIxWinBuf[i] = valGrad[1];
+        dIyWinBuf[i] = valGrad[2];
+
+        iA11 += (itemtype)(valGrad[1]*valGrad[1]); // 计算协方差矩阵元素
+        iA12 += (itemtype)(valGrad[1]*valGrad[2]);
+        iA22 += (itemtype)(valGrad[2]*valGrad[2]);
+        // num_valid_points++;
+      } else {
+        IWinBuf[i] = -1;
+      }
+    }
+
+    A11 = iA11*FLT_SCALE;
+    A12 = iA12*FLT_SCALE;
+    A22 = iA22*FLT_SCALE;
+
+    float D = A11*A22 - A12*A12;
+    float minEig = (A22 + A11 - std::sqrt((A11-A22)*(A11-A22) +
+                    4.f*A12*A12))/(2*PATTERN_SIZE);
+    
+    if( minEig < 1e-4 || D < FLT_EPSILON )
+    {
+      // if( level == 0 ) continue ;
+      valid = false;
+      std::cout << "minEig < 1e-4 || D < FLT_EPSILON" << std::endl;
+    }
+
+    valid = true;
+  }
+
+  inline bool calcResidual(const Image<const uint16_t> &img, const Vector2 &pos, Vector2 &delta) const {
+    //
+    Scalar ib1 = 0, ib2 = 0;
+    float b1, b2;
+
+    for (int i = 0; i < PATTERN_SIZE; i++) {
+      Vector2 p = pos + pattern2.col(i); // 位于图像的位置，点的位置加上pattern里面的偏移量，得到在patch里面的新的位姿
+
+      if (img.InBounds(p, 2) && IWinBuf[i] > 0) {
+        // valGrad[0]表示图像强度，valGrad[1]表示x方向梯度，valGrad[0]表示y方向梯度
+        // Vector3 valGrad = img.template interpGrad<Scalar>(p);
+        // residual[i] = img.interp<Scalar>(p);
+        Scalar val = img.interp<Scalar>(p);
+        Scalar diff = val - IWinBuf[i];
+        ib1 += diff * dIxWinBuf[i];
+        ib2 += diff * dIyWinBuf[i];
+        
+      } else {
+        // IWinBuf[i] = -1;
+      }
+    }
+
+    b1 = ib1*FLT_SCALE;
+    b2 = ib2*FLT_SCALE;
+
+    float D = A11*A22 - A12*A12;
+    D = 1.f/D;
+    // cv::Point2f delta( (float)((A12*b2 - A22*b1) * D),
+                      // (float)((A12*b1 - A11*b2) * D));
+    delta[0] = (A12*b2 - A22*b1) * D;
+    delta(1) = (A12*b1 - A11*b2) * D;
+
+    return true;
+  }
+  // the end.
 
   // 2025-1-7
   template <typename ImgT>
@@ -2203,6 +2304,14 @@ template <typename ImgT>
 
   Vector2 pos = Vector2::Zero();
   VectorP data = VectorP::Zero();  // negative if the point is not valid
+
+  // 2025-1-14
+  VectorP IWinBuf = VectorP::Zero();  // negative if the point is not valid
+  // VectorP derivIWinBuf = VectorP::Zero();  // negative if the point is not valid
+  VectorP dIxWinBuf = VectorP::Zero();  // negative if the point is not valid
+  VectorP dIyWinBuf = VectorP::Zero();  // negative if the point is not valid
+  Scalar A11, A12, A22;
+  // the end.
 
   // MatrixP3 J_se2;  // total jacobian with respect to se2 warp
   // Matrix3 H_se2_inv;

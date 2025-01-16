@@ -86,7 +86,23 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifdef _USE_RVV_INTRINSIC_
 #include <riscv_vector.h>
 #endif
+
+
+#define _WEIGHT_SCALE_
+
+#ifdef _WEIGHT_SCALE_
+#define  CV_DESCALE(x,n)     (((x) + (1 << ((n)-1))) >> (n))
+constexpr int W_BITS = 14, W_BITS1 = 14; // 定义权重的位数
+constexpr float FLT_SCALE = 1.f/(1 << 20); // 定义缩放因子，用于提高计算精度
+#else
+constexpr float FLT_SCALE = 1.f;
+#endif
 namespace basalt {
+
+inline int cvRound(float value)
+{
+  return (int)lrintf(value);
+}
 
 /// @brief Helper class for copying objects.
 template <typename T>
@@ -748,13 +764,24 @@ struct Image {
 
     S dx = x - ix; // 小数的部分
     S dy = y - iy;
-
+#if !defined(_WEIGHT_SCALE_)
     S ddx = S(1.0) - dx; // 负的小数字部分
     S ddy = S(1.0) - dy;
 
     // 双线性插值
     return ddx * ddy * (*this)(ix, iy) + ddx * dy * (*this)(ix, iy + 1) +
            dx * ddy * (*this)(ix + 1, iy) + dx * dy * (*this)(ix + 1, iy + 1);
+
+#else  
+    int iw00 = cvRound((1.f - dx)*(1.f - dy)*(1 << W_BITS));
+    int iw01 = cvRound(dx*(1.f - dy)*(1 << W_BITS));
+    int iw10 = cvRound((1.f - dx)*dy*(1 << W_BITS));
+    int iw11 = (1 << W_BITS) - iw00 - iw01 - iw10;
+
+    return CV_DESCALE((*this)(ix, iy)*iw00 + (*this)(ix + 1, iy)*iw01 +
+                      // (*this)(ix, iy + 1)*iw10 + (*this)(ix + 1, iy + 1)*iw11, W_BITS1-5);
+                      (*this)(ix, iy + 1)*iw10 + (*this)(ix + 1, iy + 1)*iw11, W_BITS1);
+#endif    
   }
 
   // for documentation see the alternative overload above
@@ -776,7 +803,7 @@ struct Image {
     S ddy = S(1.0) - dy;
 
     Eigen::Matrix<S, 3, 1> res;
-
+#if !defined(_WEIGHT_SCALE_)
     const T& px0y0 = (*this)(ix, iy);
     const T& px1y0 = (*this)(ix + 1, iy);
     const T& px0y1 = (*this)(ix, iy + 1);
@@ -815,7 +842,46 @@ struct Image {
 
     // y 方向梯度
     res[2] = S(0.5) * (res_py - res_my);
+#else
+    //
+    const T& px0y0 = (*this)(ix, iy);
+    const T& px1y0 = (*this)(ix + 1, iy);
+    const T& px0y1 = (*this)(ix, iy + 1);
+    const T& px1y1 = (*this)(ix + 1, iy + 1);
 
+    const T& pxm1y0 = (*this)(ix - 1, iy);
+    const T& pxm1y1 = (*this)(ix - 1, iy + 1);
+
+    const T& px2y0 = (*this)(ix + 2, iy);
+    const T& px2y1 = (*this)(ix + 2, iy + 1);
+
+    const T& px0ym1 = (*this)(ix, iy - 1);
+    const T& px1ym1 = (*this)(ix + 1, iy - 1);
+
+    const T& px0y2 = (*this)(ix, iy + 2);
+    const T& px1y2 = (*this)(ix + 1, iy + 2);
+
+    int iw00 = cvRound((1.f - dx)*(1.f - dy)*(1 << W_BITS));
+    int iw01 = cvRound(dx*(1.f - dy)*(1 << W_BITS));
+    int iw10 = cvRound((1.f - dx)*dy*(1 << W_BITS));
+    int iw11 = (1 << W_BITS) - iw00 - iw01 - iw10;
+
+    // res[0] = CV_DESCALE((*this)(ix, iy)*iw00 + (*this)(ix + 1, iy)*iw01 +
+    //                     (*this)(ix, iy + 1)*iw10 + (*this)(ix + 1, iy + 1)*iw11, W_BITS1-5);
+
+    // res[0] = CV_DESCALE(px0y0*iw00 + px1y0*iw01 + px0y1*iw10 + px1y1*iw11, W_BITS1-5);
+    res[0] = CV_DESCALE(px0y0*iw00 + px1y0*iw01 + px0y1*iw10 + px1y1*iw11, W_BITS1); // test.
+
+    //res[0] = ddx * ddy * px0y0 + ddx * dy * px0y1 + dx * ddy * px1y0 +dx * dy * px1y1;
+    S res_mx = CV_DESCALE(iw00 * pxm1y0 + iw10 * pxm1y1 + iw01 * px0y0 + iw11 * px0y1, W_BITS1);
+    S res_px = CV_DESCALE(iw00 * px1y0 + iw10 * px1y1 + iw01 * px2y0 + iw11 * px2y1, W_BITS1);
+    res[1] = S(0.5) * (res_px - res_mx);
+
+    S res_my = CV_DESCALE(iw00 * px0ym1 + iw10 * px0y0 + iw01 * px1ym1 + iw11 * px1y0, W_BITS1);
+    S res_py = CV_DESCALE(iw00 * px0y1 + iw10 * px0y2 + iw01 * px1y1 + iw11 * px1y2, W_BITS1);
+    res[2] = S(0.5) * (res_py - res_my);
+
+#endif
     return res;
   }
 

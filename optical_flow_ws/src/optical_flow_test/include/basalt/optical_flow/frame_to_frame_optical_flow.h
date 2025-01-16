@@ -1215,7 +1215,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                     new_transforms->observations[i]);
         #endif
 
-        if(i == 0)
+        if(0)//(i == 0)
         {
           std::ostringstream oss;
           oss << "forw_track_failed_cnt=" << forw_track_failed_cnt << " back_track_failed_cnt="
@@ -1852,11 +1852,19 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       #ifdef _CALC_TIME_
       clock_one_point += PatchT::clock_sum;
       #endif
-
+#if !defined(FORWARD_ADDITIVE_APPROACH)
       patch_valid &= p.valid;
+#else
+      // if(!p.valid && level == 0) patch_valid = false;
+      patch_valid &= (p.valid? true: (level != 0));
+#endif      
       if (patch_valid) {
         // Perform tracking on current level
+#if !defined(FORWARD_ADDITIVE_APPROACH)        
         patch_valid &= trackPointAtLevel(pyr.lvl(level), p, transform);
+#else        
+        patch_valid &= trackPointAtLevel2(pyr.lvl(level), p, transform);
+#endif        
       }
 
       // 得到的结果变换到第0层对应的尺度
@@ -1914,6 +1922,73 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
     return patch_valid;
   }
+
+  // 2025-1-14
+  inline bool trackPointAtLevel2(const Image<const uint16_t>& img_2,
+                                const PatchT& dp,
+                                Eigen::AffineCompact2f& transform) const {
+    bool patch_valid = true;
+
+    typename PatchT::Vector2 prevDelta;
+    prevDelta.setZero();
+
+    // 指定循环次数，且patch合法
+    // int iteration = 0; // added this line for test 2023-12-15.
+    for (int iteration = 0;
+        //  patch_valid && iteration < config.optical_flow_max_iterations;
+         patch_valid && iteration < max_iterations_;
+         iteration++) {
+      typename PatchT::Vector2 delta;
+
+      // 计算参考帧和当前帧patern对应的像素值差
+      patch_valid &= dp.calcResidual(img_2, transform.translation(), delta);
+
+      if (patch_valid) {
+        // 计算增量，扰动更新
+        // const Vector3 inc = -dp.H_se2_inv_J_se2_T * res; // 求增量Δx = - H^-1 * J^T * r
+        
+
+        // avoid NaN in increment (leads to SE2::exp crashing)
+        patch_valid &= delta.array().isFinite().all();
+        if(!patch_valid) std::cout << "1 delta= " << delta.transpose() << std::endl;
+
+        // avoid very large increment
+        patch_valid &= delta.template lpNorm<Eigen::Infinity>() < 1e6;
+        if(!patch_valid) std::cout << "2 delta= " << delta.transpose() << std::endl;
+
+        if (patch_valid) {
+          // 更新状态量
+          transform.translation() += delta;
+
+          const int filter_margin = 2;
+
+          // 判断更新后的像素坐标是否在图像img_2范围内
+          patch_valid &= img_2.InBounds(transform.translation(), filter_margin);
+          if(!patch_valid) std::cout << "3 transform= " << transform.translation().transpose() << std::endl;
+        }
+      }
+
+      //
+      if( delta.squaredNorm() <= 0.01 ) // 位移增量的2范数的平方小于阈值认为收敛
+        break;
+
+      // 如果两次迭代的位移差异非常小，认为已经收敛
+      if( iteration > 0 && std::abs(delta.x() + prevDelta.x()) < 0.01 &&
+        std::abs(delta.y() + prevDelta.y()) < 0.01 )
+      {
+        // 如果迭代过程收敛，微调特征点的位置（减去一半的位移量）并跳出循环
+        // nextPts[ptidx] -= delta*0.5f;
+        break;
+      }
+      prevDelta = delta; // 更新 prevDelta 为当前的 delta，为下一次迭代做准备。    
+      //
+    }
+
+    // std::cout << "num_it = " << iteration << std::endl;
+
+    return patch_valid;
+  }
+  // the end.
 
   void addPoints_pyr(const std::vector<cv::Mat> &pyr0, const std::vector<cv::Mat> &pyr1) {
     // test
