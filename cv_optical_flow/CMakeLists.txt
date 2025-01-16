@@ -48,6 +48,7 @@ SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 # find_package(Eigen3 REQUIRED)
 # find_package(OpenCV REQUIRED)
 find_package(OpenCV 4 REQUIRED)
+find_package(TBB REQUIRED)
 
 # test1 for sse
 # add_executable(test1
@@ -60,7 +61,8 @@ find_package(OpenCV 4 REQUIRED)
 # )
 
 add_executable(test1
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/test1.cpp
+${CMAKE_CURRENT_SOURCE_DIR}/src/test1.cpp
+${CMAKE_CURRENT_SOURCE_DIR}/src/wx_lkpyramid.cpp
 )
 
 # add_executable(test3
@@ -69,7 +71,7 @@ add_executable(test1
 
 # target_link_libraries(test1 Eigen3::Eigen)
 
-target_link_libraries(test1 ${OpenCV_LIBS})
+target_link_libraries(test1 ${OpenCV_LIBS} TBB::tbb)
 # target_link_libraries(test2 ${OpenCV_LIBS})
 
 # target_link_libraries(test1 -lpthread)

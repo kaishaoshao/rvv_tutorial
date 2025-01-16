@@ -1,6 +1,7 @@
 //
 #include <opencv2/opencv.hpp>
 #include <vector>
+#include "wx_lkpyramid.h"
 
 using namespace cv;
 
@@ -118,7 +119,7 @@ void addPaddingToImage(const cv::Mat& img, const Size& winSize, int pyrBorder, c
 int main(int argc, char* argv[]) 
 {
     // 读取两帧图像
-#if 1    
+#if 0    
     cv::Mat prevImg = cv::imread("../assets/1726299898318057216.png", cv::IMREAD_GRAYSCALE);
     cv::Mat nextImg = cv::imread("../assets/1726299898366026496.png", cv::IMREAD_GRAYSCALE);
 #else
@@ -137,7 +138,7 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    if(1)
+    if(0)
     {
         // 假设你已经构建了图像金字塔
         std::vector<Mat> pyramid;
@@ -194,6 +195,7 @@ int main(int argc, char* argv[])
         std::vector<uchar> status;
         std::vector<float> err;
         cv::calcOpticalFlowPyrLK(paddedPyramid, paddedPyramid, prevPts, nextPts, status, err, cv::Size(21, 21), 3);
+        // wx::liu::calcOpticalFlowPyrLK(paddedPyramid, paddedPyramid, prevPts, nextPts, status, err, cv::Size(21, 21), 3);
 
         // 可视化结果
         for (size_t i = 0; i < prevPts.size(); i++) {
@@ -206,6 +208,8 @@ int main(int argc, char* argv[])
         // 显示结果
         cv::imshow("2 Optical Flow", nextImg);
         cv::waitKey(0);
+
+        std::cout << "main() exit.\n";
 
         return 0;
     }
@@ -313,7 +317,9 @@ int main(int argc, char* argv[])
     cv::buildOpticalFlowPyramid(prevImg, prevPyramid, cv::Size(21, 21), maxLevel, withDerivatives);
     cv::buildOpticalFlowPyramid(nextImg, nextPyramid, cv::Size(21, 21), maxLevel, withDerivatives);
 
-    std::cout << "prevPyramid.size=" << prevPyramid.size() << std::endl;
+    std::cout << "prevPyramid.size=" << prevPyramid.size() \
+        << " prevPts.size=" << prevPts.size() << std::endl;
+ #if 0       
     /*for(auto img : prevPyramid)
     {
         // cv::imshow("pyramid image", pyr1.at(i));
@@ -329,7 +335,7 @@ int main(int argc, char* argv[])
         // 保存金字塔图像（可选）
         // cv::imwrite("pyramid_level_" + std::to_string(i) + ".png", prevPyramid[i]);
     }
-
+#endif
     // 等待用户按键
     cv::waitKey(0);
 
@@ -338,7 +344,8 @@ int main(int argc, char* argv[])
     std::vector<float> err;
 
     // 计算金字塔光流
-    cv::calcOpticalFlowPyrLK(prevPyramid, nextPyramid, prevPts, nextPts, status, err, cv::Size(21, 21), maxLevel);
+    // cv::calcOpticalFlowPyrLK(prevPyramid, nextPyramid, prevPts, nextPts, status, err, cv::Size(21, 21), maxLevel);
+    wx::liu::calcOpticalFlowPyrLK(prevPyramid, nextPyramid, prevPts, nextPts, status, err, cv::Size(21, 21), maxLevel);
 
     // 可视化结果
     for (size_t i = 0; i < prevPts.size(); i++) {
