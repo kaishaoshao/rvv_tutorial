@@ -335,9 +335,10 @@ int main(int argc, char* argv[])
         // 保存金字塔图像（可选）
         // cv::imwrite("pyramid_level_" + std::to_string(i) + ".png", prevPyramid[i]);
     }
-#endif
+
     // 等待用户按键
     cv::waitKey(0);
+#endif
 
     // 存储跟踪结果
     std::vector<uchar> status;
