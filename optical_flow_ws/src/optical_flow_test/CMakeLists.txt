@@ -139,6 +139,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 #   /root/SETUP/gperftools_install/include
   ${CMAKE_CURRENT_SOURCE_DIR}/../include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../cv_optical_flow/src
 )
 
 # link_directories(/root/SETUP/gperftools_install/lib)
@@ -153,6 +154,7 @@ add_executable(optical_flow_test
   src/util/compile_date_time.cpp
   src/undistorted_photometric.cpp
   src/util/cmap.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../cv_optical_flow/src/wx_lkpyramid.cpp
 )
 
 

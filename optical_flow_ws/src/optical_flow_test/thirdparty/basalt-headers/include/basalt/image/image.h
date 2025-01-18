@@ -99,10 +99,10 @@ constexpr float FLT_SCALE = 1.f;
 #endif
 namespace basalt {
 
-inline int cvRound(float value)
-{
-  return (int)lrintf(value);
-}
+// inline int cvRound(float value)
+// {
+//   return (int)lrintf(value);
+// }
 
 /// @brief Helper class for copying objects.
 template <typename T>
