@@ -59,6 +59,8 @@ namespace wx::Simd {
         const size_t OA = 8 * A;
         const size_t HA = A / 2;
 
+        void ReduceGray5x5(const uint8_t *src, size_t srcWidth, size_t srcHeight, size_t srcStride,
+            uint8_t *dst, size_t dstWidth, size_t dstHeight, size_t dstStride, int compensation); // 2025-2-11.
     }
 #endif    
     //

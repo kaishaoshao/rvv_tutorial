@@ -45,7 +45,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv")
 # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=rv64gcv_zba_zbb_zbc_zbs -fno-tree-vectorize -fno-tree-loop-vectorize")
 
 
-# find_package(Eigen3 REQUIRED)
+find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # test1 for sse
@@ -69,7 +69,7 @@ add_executable(test2
 # target_link_libraries(test1 Eigen3::Eigen)
 
 # target_link_libraries(test1 ${OpenCV_LIBS})
-target_link_libraries(test2 ${OpenCV_LIBS})
+target_link_libraries(test2 ${OpenCV_LIBS} Eigen3::Eigen)
 
 # target_link_libraries(test1 -lpthread)
 

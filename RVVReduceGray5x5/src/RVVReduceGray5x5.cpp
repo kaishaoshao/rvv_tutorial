@@ -13,6 +13,9 @@
 #include <opencv2/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+// 2025-2-11
+#include "image_pyr.h"
+// the end.
 
 namespace wx::Simd
 {
@@ -348,6 +351,7 @@ int main(int argc, char *argv[])
 	}
 
     clock_t clock_start = clock();
+  #if 1  
     cv::Mat mipmap(cv::Size(srcWidth + srcWidth / 2, srcHeight), CV_8UC1);
     image_gray.copyTo(mipmap(cv::Rect(0, 0, srcWidth, srcHeight)));
 
@@ -370,12 +374,58 @@ int main(int argc, char *argv[])
         dst_begin += srcH*stride;
         wx::Simd::Rvv::ReduceGray5x5(src_begin, srcW, srcH, stride, dst_begin, dstW, dstH, stride, 1);
     }
+  #elif 0 // another storage method of image pyramid test ok. on 2025-2-11
+    int srcW = srcWidth;
+    int srcH = srcHeight;
+    int dstW = srcW;
+    int dstH = srcH;
+    std::vector<cv::Mat> pyramid(5);
+    pyramid[0] = image_gray.clone();
+    int srcStride = pyramid[0].step[0];
+    int dstStride = srcStride / 2;
+    uint8_t* src_begin = nullptr;
+    uint8_t* dst_begin = nullptr;
+
+    // test
+    // pyramid[1].create(dstH, dstW, CV_8UC1);
+    // uint8_t* src_begin = pyramid[0].data;
+    // uint8_t* dst_begin = pyramid[1].data;
+    // wx::Simd::Rvv::ReduceGray5x5(src_begin, srcW, srcH, srcStride, dst_begin, dstW, dstH, dstStride, 1);
+    // cv::imshow("level1", pyramid[1]);
+
+    for(int i=1; i<5; i++)
+    {
+        srcW = dstW;
+        srcH = dstH;
+        dstW /= 2;
+        dstH /= 2;
+
+        pyramid[i].create(dstH, dstW, CV_8UC1);
+
+        src_begin = pyramid[i-1].data;
+        dst_begin = pyramid[i].data;
+        srcStride = pyramid[i-1].step[0];
+        dstStride = srcStride / 2;
+        wx::Simd::Rvv::ReduceGray5x5(src_begin, srcW, srcH, srcStride, dst_begin, dstW, dstH, dstStride, 1);
+    }/**/
+  #endif
 
     clock_t clock_end = clock();
     std::cout << std::fixed << std::setprecision(3) << "risc-v vector image pyramid:" << " clock=" << (clock_end - clock_start) << " cycles\n";
 
+  #if 1  
     cv::imshow("mipmap", mipmap);
     cv::waitKey(0);
+  #elif 0
+    cv::imshow("level0", pyramid[0]);
+    cv::imshow("level1", pyramid[1]);
+    cv::imshow("level2", pyramid[2]);
+    cv::imshow("level3", pyramid[3]);
+    cv::imshow("level4", pyramid[4]);
+    cv::waitKey(0);
+  #endif  
+
+    basalt::ManagedImagePyr<uint8_t> image_pyr(image_gray, 3);
     
     return 0;
 }
