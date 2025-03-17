@@ -42,7 +42,8 @@ int main(int argc, char* argv[])
     // generate patch 2025-1-20
     if(1)
     {
-      int size = 9;
+    #if 0  
+      int size = 17;//9;
       cv::Size winSize(size, size);
       cv::Point2f halfWin((winSize.width-1)*0.5f, (winSize.height-1)*0.5f);
       // cv::Point2f prevPt(pos.x(), pos[1]);
@@ -63,6 +64,20 @@ int main(int argc, char* argv[])
           pOffset[i++] = y - halfWin.y;
         }
       }
+    #else
+      int size = 8;
+      float *pOffset = pattern_win.data();
+      int i = 0;
+      int halfpatch_size = 4;
+      for (int y=-halfpatch_size; y<halfpatch_size; ++y)
+      {
+        for (int x=-halfpatch_size; x<halfpatch_size; ++x)
+        {
+          pOffset[i++] = x;
+          pOffset[i++] = y;
+        }
+      }
+    #endif
 
       // std::cout << "pattern_win=\n" << pattern_win << std::endl;
       int count = size * size;
